@@ -4,7 +4,9 @@ import pandas as pd
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 import json
+
 INDEX_NAME = "paper"
+
 
 def readPDF(path):
     file = open(path, 'rb')
@@ -24,24 +26,35 @@ def readPDF(path):
     return [title, creator, concat.getvalue().replace("\n", " ")]
 
 
+def readJSON(path):
+    jsondata = []
+    for line in open(path, 'r'):
+        jsondata.append(json.loads(line))
+
+    return jsondata
+
+
 def create_index(es_client):
     """ Creates an Elasticsearch index."""
     is_created = False
     # Index settings
     settings = {
         "settings": {
-            "number_of_shards": 2,
+            "number_of_shards": 1,
             "number_of_replicas": 1
         },
         "mappings": {
             "dynamic": "true",
             "_source": {
-            "enabled": "true"
+                "enabled": "true"
             },
             "properties": {
-                "body": {
-                    "type": "text"
-                }
+                "title": {"type": "text"},
+                "dblpKey": {"type": "keyword"},
+                "dpi": {"type": "keyword"},
+                "authors": {"type": "text"},
+                "publisher": {"type": "text"},
+                "booktitle": {"type": "text"}
             }
         }
     }
@@ -59,7 +72,8 @@ def create_index(es_client):
 
 
 def index_data(es_client, data, BATCH_SIZE=100000):
-    """ Indexs all the rows in data (python questions)."""
+    """ Indexs all the rows in data"""
+    """
     docs = []
     count = 0
     for line in data:
@@ -78,6 +92,18 @@ def index_data(es_client, data, BATCH_SIZE=100000):
 
     es_client.indices.refresh(index=INDEX_NAME)
     print("Done indexing.")
+    """
+    for i in data:
+        insert_one_data(i)
+        print('Indexed {} document.'.format(i))
+
+    print("Done indexing!!! Wuhu")
+
+
+def insert_one_data(doc):
+    res = es_client.index(index=INDEX_NAME, body=doc)
+    print(res)
+
 
 def index_batch(docs):
     """ Indexes a batch of documents."""
@@ -89,6 +115,13 @@ def index_batch(docs):
         request["body"] = doc['body']
         requests.append(request)
     bulk(es_client, requests)
+
+
+def createIndexAndIndexDocs(es_client, path):
+    data = readJSON("dump_no_bodytext.json")
+    create_index(es_client)
+    index_data(es_client, data)
+
 
 def run_query_loop():
     """ Asks user to enter a query to search."""
@@ -103,8 +136,9 @@ def run_query_loop():
 def handle_query():
     """ Searches the user query and finds the best matches using elasticsearch."""
     query = input("Enter query: ")
-
-    search = {"size": 100,"query": {"match": {"body": query}}}
+    # to search more then one field, use multi search api
+    # search = {"size": SEARCH_SIZE,"query": {"match": {"title": query}}}
+    search = {"size": SEARCH_SIZE, "query": {"multi_match": {"query": query, "fields": ["title", "authors"]}}}
     print(search)
     response = es_client.search(index=INDEX_NAME, body=json.dumps(search))
     print()
@@ -114,11 +148,10 @@ def handle_query():
         print(hit["_source"])
         print()
 
-data = [readPDF('Decomposability, Transparency and Multipoles (50 min).pdf')]
-data.append(["wir schreiben hier viele sachen rein", "eigentlich muss ", "ich mehr sachen"])
-data.append(["test", "newtest", "noch ein test weil es so lustig ist"])
+
 es_client = Elasticsearch()
-create_index(es_client)
-index_data(es_client, data)
-SEARCH_SIZE = 3
+""" only run this the first time!!! Might take 15-20 Minutes """
+# createIndexAndIndexDocs(es_client, "dump_no_bodytext.json")
+
+SEARCH_SIZE = 10
 run_query_loop()
