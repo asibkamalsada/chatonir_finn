@@ -28,7 +28,7 @@ def readPDF(path):
 
 def readJSON(path):
     jsondata = []
-    for line in open(path, 'r'):
+    for line in open(path, 'r', encoding='utf8'):
         jsondata.append(json.loads(line))
 
     return jsondata

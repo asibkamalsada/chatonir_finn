@@ -1,3 +1,5 @@
 name: chatonir_finn
 dependencies:
 - python=3.7
+- elasticsearch=7.10.0
+- pypdf2=1.26.0
