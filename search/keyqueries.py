@@ -8,7 +8,7 @@ import json
 from elasticsearch.helpers import scan
 
 INDEX_NAME = "paper"
-MAX_SEARCH = 100
+MAX_SEARCH = 10000
 
 
 def extract_keywords(seeds):
@@ -50,9 +50,7 @@ def legal_keyword(es, min_, query, seeds):
         return False
 
     while response["hits"]["hits"]:
-        for hit in response["hits"]["hits"]:
-            with suppress(ValueError):
-                left_seeds.remove(hit["_source"])
+        left_seeds = [seed for seed in left_seeds if seed not in [x["_source"] for x in response["hits"]["hits"]]]
         search_after = response["hits"]["hits"][-1]["sort"]
         response = q(es, query, search_after=search_after)
 
