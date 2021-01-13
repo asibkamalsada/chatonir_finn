@@ -51,7 +51,7 @@ def create_index(es_client):
             "properties": {
                 "title": {"type": "text"},
                 "dblpKey": {"type": "keyword"},
-                "dpi": {"type": "keyword"},
+                "doi": {"type": "keyword"}, # typo read "dpi" first
                 "authors": {"type": "text"},
                 "publisher": {"type": "text"},
                 "booktitle": {"type": "text"}
@@ -139,6 +139,16 @@ def handle_query():
     # to search more then one field, use multi search api
     # search = {"size": SEARCH_SIZE,"query": {"match": {"title": query}}}
     search = {"size": SEARCH_SIZE, "query": {"multi_match": {"query": query, "fields": ["title", "authors"]}}}
+    search = {
+        "query": {
+            "match": {
+                "title": {
+                    "query": query,
+                    "operator": "and"
+                }
+            }
+        }
+    }
     print(search)
     response = es_client.search(index=INDEX_NAME, body=json.dumps(search))
     print()
