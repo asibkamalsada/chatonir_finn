@@ -49,7 +49,7 @@ def legal_query(es, seeds, query, min_, max_=sys.maxsize):
     too_many = hits_n > max_
 
     if hits_n < min_:
-        print('too few ({}) hits'.format(hits_n))
+        #print('too few ({}) hits'.format(hits_n))
         return [], False, too_many
 
     ids = []
@@ -106,8 +106,7 @@ def query_extraction(es, seeds, min_, max_):
 
     filtered = [keyword for keyword in keywords if legal_query(es, seeds, keyword, min_)[1]]
 
-    for querywords in query_loop(es, seeds, filtered, min_, max_):
-        yield querywords
+    yield from query_loop(es, seeds, set(filtered), set(), min_, max_, set())
 
 
 """print(len(filtered))
@@ -117,20 +116,21 @@ def query_extraction(es, seeds, min_, max_):
     return filtered"""
 
 
-def query_loop(es, seeds, keywords_, min_, max_):
-    keywords = list(keywords_)
-    for head in keywords:
-        keywords.remove(head)
-        k_ = list(keywords)
-        querywords = [head]
-
-        while k_:
-            next_ = random.choice(k_)
-            querywords.append(next_)
-            k_.remove(next_)
+def query_loop(es, seeds, keywords, querywords, min_, max_, results):
+    for next_ in keywords:
+        keywords.remove(next_)
+        querywords.add(next_)
+        print(querywords)
+        if querywords not in results:
             ids, legal, too_many = legal_query(es, seeds, ' '.join(querywords), min_, max_)
+            if legal and too_many:
+                yield from query_loop(es, seeds, keywords, querywords, min_, max_, results)
             if legal and not too_many:
-                yield querywords
+                result = frozenset(querywords)
+                results.add(result)
+                yield result
+        keywords.add(next_)
+        querywords.remove(next_)
 
 
 def read_json(path):
@@ -156,8 +156,10 @@ def main():
                      body={"query": {"match": {"title": "Efficiently monitoring data-flow test coverage."}}})["hits"][
         "hits"][0]
 
-    for ids in query_extraction(es, [hit1], 1, sys.maxsize):
-        print(ids)
+    count = 0
+    for keyquery in query_extraction(es, [hit2], 2, 50):
+        count += 1
+    print(count)
 
 
 if __name__ == '__main__':
