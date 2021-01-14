@@ -120,7 +120,7 @@ def query_loop(es, seeds, keywords, querywords, min_, max_, results):
     for next_ in keywords:
         keywords.remove(next_)
         querywords.add(next_)
-        print(querywords)
+        # print(querywords)
         if querywords not in results:
             ids, legal, too_many = legal_query(es, seeds, ' '.join(querywords), min_, max_)
             if legal and too_many:
