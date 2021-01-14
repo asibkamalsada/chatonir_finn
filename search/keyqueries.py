@@ -1,3 +1,4 @@
+import random
 import re
 import sys
 from contextlib import suppress
@@ -14,7 +15,7 @@ MAX_SEARCH = 10000
 def extract_keywords(seeds):
     keywords = set()
     for seed in seeds:
-        title_words = re.sub(r'[^a-zA-Z ]', '', seed['title']).lower().split()
+        title_words = re.sub(r'[^a-zA-Z ]', '', seed['_source']['title']).lower().split()
         title_words2 = ['{} {}'.format(x, y) for x, y in zip(title_words[::2], title_words[1::2])]
         keywords.update(title_words)
     return keywords
@@ -40,24 +41,32 @@ def q(es, sentence, search_after=None):
     return es.search(index=INDEX_NAME, body=query)
 
 
-def legal_keyword(es, min_, query, seeds):
-    left_seeds = list(seeds)
+def legal_query(es, seeds, query, min_, max_=sys.maxsize):
+    left_seeds = set([seed["_id"] for seed in seeds])
 
     response = q(es, query)
     hits_n = response["hits"]["total"]["value"]
+    too_many = hits_n > max_
+
     if hits_n < min_:
         print('too few ({}) hits'.format(hits_n))
-        return False
+        return [], False, too_many
+
+    ids = []
 
     while response["hits"]["hits"]:
-        left_seeds = [seed for seed in left_seeds if seed not in [x["_source"] for x in response["hits"]["hits"]]]
+        ids.extend([hit["_id"] for hit in response["hits"]["hits"]])
+        # left_seeds -= set([hit["_id"] for hit in response["hits"]["hits"]])
+        # left_seeds = [seed for seed in left_seeds if seed not in [x["_source"] for x in response["hits"]["hits"]]]
         search_after = response["hits"]["hits"][-1]["sort"]
         response = q(es, query, search_after=search_after)
 
-#    if not all(item in [hit["_source"] for hit in response["hits"]["hits"]] for item in seeds):
-#        return False
+    return ids, left_seeds.issubset(ids), too_many
 
-    return len(left_seeds) == 0
+    #    if not all(item in [hit["_source"] for hit in response["hits"]["hits"]] for item in seeds):
+    #        return False
+
+    # return len(left_seeds) == 0, too_many
 
 
 """
@@ -76,7 +85,7 @@ def legal_keyword(es, min_, query, seeds):
 """
 
 
-def query_loop(es, min_, max_, seeds):
+def query_extraction(es, seeds, min_, max_):
     """
 
     :type es: Elasticsearch
@@ -95,13 +104,33 @@ def query_loop(es, min_, max_, seeds):
         # return seeds
     keywords = extract_keywords(seeds)
 
-    filtered = [keyword for keyword in keywords if legal_keyword(es, min_, keyword, seeds)]
+    filtered = [keyword for keyword in keywords if legal_query(es, seeds, keyword, min_)[1]]
 
-    print(len(filtered))
+    for querywords in query_loop(es, seeds, filtered, min_, max_):
+        yield querywords
+
+
+"""print(len(filtered))
     for i in range(len(filtered)):
         print(filtered[i])
 
-    return filtered
+    return filtered"""
+
+
+def query_loop(es, seeds, keywords_, min_, max_):
+    keywords = list(keywords_)
+    for head in keywords:
+        keywords.remove(head)
+        k_ = list(keywords)
+        querywords = [head]
+
+        while k_:
+            next_ = random.choice(k_)
+            querywords.append(next_)
+            k_.remove(next_)
+            ids, legal, too_many = legal_query(es, seeds, ' '.join(querywords), min_, max_)
+            if legal and not too_many:
+                yield querywords
 
 
 def read_json(path):
@@ -114,7 +143,21 @@ def read_json(path):
 
 def main():
     es = Elasticsearch()
-    print(query_loop(es, 5, sys.maxsize, read_json('seed.json')))
+    hit1 = es.search(index=INDEX_NAME, body={"query": {"match": {
+        "title": "Incorporating Historical Test Case Performance Data and Resource Constraints into Test Case Prioritization."}}})[
+        "hits"]["hits"][0]
+    hit2 = es.search(index=INDEX_NAME,
+                     body={"query": {"match": {"title": "The test data challenge for database-driven applications."}}})[
+        "hits"]["hits"][0]
+    hit3 = es.search(index=INDEX_NAME,
+                     body={"query": {"match": {"title": "Strong higher order mutation-based test data generation."}}})[
+        "hits"]["hits"][0]
+    hit4 = es.search(index=INDEX_NAME,
+                     body={"query": {"match": {"title": "Efficiently monitoring data-flow test coverage."}}})["hits"][
+        "hits"][0]
+
+    for ids in query_extraction(es, [hit1], 1, sys.maxsize):
+        print(ids)
 
 
 if __name__ == '__main__':
