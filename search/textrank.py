@@ -84,11 +84,14 @@ class TextRank4Keyword():
 
     def get_keywords(self, number=10):
         """Print top number keywords"""
+        keywords = []
         node_weight = OrderedDict(sorted(self.node_weight.items(), key=lambda t: t[1], reverse=True))
         for i, (key, value) in enumerate(node_weight.items()):
-            print(key + ' - ' + str(value))
+            keywords.append(key)
+            # print(key + ' - ' + str(value))
             if i > number:
                 break
+        return keywords
 
     def analyze(self, text,
                 candidate_pos=['NOUN', 'PROPN'],
