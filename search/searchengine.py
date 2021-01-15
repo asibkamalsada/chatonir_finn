@@ -4,6 +4,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 import json
 import textrank
+import keyqueries
 
 class Searchengine():
 
@@ -125,7 +126,7 @@ class Searchengine():
                 }
             }
         }
-        print(search)
+        #print(search)
         response = self.es_client.search(index=self.INDEX_NAME, body=json.dumps(search))
         """
         print("{} total hits.".format(response["hits"]["total"]["value"]))
@@ -173,9 +174,5 @@ class Searchengine():
         for i in numbers:
             allinfo += paper[int(i)] + " "
 
-        extractor = textrank.TextRank4Keyword()
-        extractor.analyze(allinfo, candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=False)
-        keywords = extractor.get_keywords(10)
-
-        # put this into keyqueries, but dont know how at the moment
-        print(keywords)
+        keyquerie = keyqueries.start(allinfo)
+        print(keyquerie)
