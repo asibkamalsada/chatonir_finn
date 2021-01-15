@@ -173,9 +173,9 @@ class Searchengine():
         for i in numbers:
             allinfo += paper[int(i)] + " "
 
-        keyword = textrank.TextRank4Keyword()
-        keyword.analyze(allinfo, candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=False)
-        keywords = keyword.get_keywords(10)
+        extractor = textrank.TextRank4Keyword()
+        extractor.analyze(allinfo, candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=False)
+        keywords = extractor.get_keywords(10)
 
         # put this into keyqueries, but dont know how at the moment
         print(keywords)
