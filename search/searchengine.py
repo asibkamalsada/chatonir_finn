@@ -148,7 +148,7 @@ class Searchengine():
                 for i in query:
                     response = self.handle_query(i)
                     for hit in response["hits"]["hits"]:
-                        paper[j] = hit["_source"]["title"]
+                        paper[j] = hit
                         j += 1
                 break
             if int(ask) == 2:
@@ -158,7 +158,7 @@ class Searchengine():
 
         print("Please select the paper(s) you want to use like so ('1, 3, 10')")
         for i in paper:
-            print(str(i) + " : " + paper[i])
+            print(str(i) + " : " + paper[i]["_source"]["title"])
         while True:
             numbers = input()
             numbers = numbers.split(",")
@@ -170,9 +170,9 @@ class Searchengine():
             else:
                 print("Wrong Input, pls try again!")
 
-        allinfo = ""
+        """allinfo = ""
         for i in numbers:
-            allinfo += paper[int(i)] + " "
+            allinfo += paper[int(i)] + " " """
 
-        keyquerie = keyqueries.start(allinfo)
-        print(keyquerie)
+        k = keyqueries.start(self.es_client, list(paper.values()))
+        print(k)

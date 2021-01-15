@@ -15,7 +15,7 @@ MAX_SEARCH = 10000
 
 def extract_keywords(seeds):
     extractor = textrank.TextRank4Keyword()
-    extractor.analyze(seeds, candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=False)
+    extractor.analyze(' '.join([s["_source"]["title"] for s in seeds]), candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=False)
     keywords = extractor.get_keywords(10)
     return keywords
 
@@ -127,7 +127,7 @@ def query_loop(es, seeds, keywords, querywords, min_, max_, results):
             if legal and not too_many:
                 result = frozenset(querywords)
                 results.add(result)
-                yield result
+                yield result, ids
         keywords.add(next_)
         querywords.remove(next_)
 
@@ -140,9 +140,19 @@ def read_json(path):
     return jsondata
 
 
-def start(seed):
+def start(es, seed):
+    count = 0
+    result = []
+    for keyquery, ids in query_extraction(es, seed, 2, 50):
+        result.append(keyquery)
+        count += 1
+        print(str(keyquery) + " " + str(ids))
+
+    return result
+
+
+def main():
     es = Elasticsearch()
-    """
     hit1 = es.search(index=INDEX_NAME, body={"query": {"match": {
         "title": "Incorporating Historical Test Case Performance Data and Resource Constraints into Test Case Prioritization."}}})[
         "hits"]["hits"][0]
@@ -155,17 +165,8 @@ def start(seed):
     hit4 = es.search(index=INDEX_NAME,
                      body={"query": {"match": {"title": "Efficiently monitoring data-flow test coverage."}}})["hits"][
         "hits"][0]
-    """
+    start(es, [hit1])
 
-    count = 0
-    result = []
-    for keyquery in query_extraction(es, seed, 2, 50):
-        result.append(keyquery)
-        count += 1
 
-    return result
-
-"""
 if __name__ == '__main__':
     main()
-"""
