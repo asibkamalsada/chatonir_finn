@@ -38,7 +38,7 @@ class Searchengine():
 
         return jsondata
 
-    def create_index(self, es_client):
+    def create_index(self):
         """ Creates an Elasticsearch index."""
         is_created = False
         # Index settings
@@ -64,9 +64,9 @@ class Searchengine():
         }
         print('Creating `Paper` index...')
         try:
-            if es_client.indices.exists(self.INDEX_NAME):
-                es_client.indices.delete(index=self.INDEX_NAME, ignore=[404])
-            es_client.indices.create(index=self.INDEX_NAME, body=settings)
+            if self.es_client.indices.exists(self.INDEX_NAME):
+                self.es_client.indices.delete(index=self.INDEX_NAME, ignore=[404])
+            self.es_client.indices.create(index=self.INDEX_NAME, body=settings)
             is_created = True
             print('index created successfully.')
         except Exception as ex:
@@ -76,9 +76,9 @@ class Searchengine():
 
     def index_data(self, data, BATCH_SIZE=100000):
         """ Indexs all the rows in data"""
-        for i in data:
-            self.insert_one_data(i)
-            print('Indexed {} document.'.format(i))
+        for doc in data:
+            self.insert_one_data(doc)
+            print(f'Indexed {doc} document.')
 
         print("Done indexing!!! Wuhu")
 
@@ -97,16 +97,16 @@ class Searchengine():
             requests.append(request)
         bulk(self.es_client, requests)
 
-    def createIndexAndIndexDocs(self, es_client, path):
+    def createIndexAndIndexDocs(self, path):
         data = self.readJSON(path)
-        self.create_index(es_client)
-        self.index_data(es_client, data)
+        self.create_index()
+        self.index_data(data)
 
     def run_query_loop(self):
         """ Asks user to enter a query to search."""
         while True:
             try:
-                self.handle_query()
+                self.handle_query(input('enter query\n'))
             except KeyboardInterrupt:
                 break
         return
