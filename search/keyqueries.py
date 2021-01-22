@@ -1,13 +1,9 @@
-import random
-import re
 import sys
-from contextlib import suppress
-import textrank
 
+import textrank
 from elasticsearch import Elasticsearch
 import json
 
-from elasticsearch.helpers import scan
 
 INDEX_NAME = "paper"
 MAX_SEARCH = 10000
@@ -33,7 +29,7 @@ def q(es, sentence, size=MAX_SEARCH, search_after=None):
                 }
             }
         },
-        "sort": ["_doc"]
+        # "sort": ["_doc"]
     }
 
     if search_after:
@@ -51,7 +47,7 @@ def legal_query(es, seed, query):
 
     ids = [hit['_id'] for hit in response["hits"]["hits"]]
     try:
-        first = ids.index(seed['_id']) == 1
+        first = ids.index(seed['_id']) == 0
         found = True
     except ValueError:
         first = False
@@ -66,7 +62,7 @@ def legal_query(es, seed, query):
 
 
 def query_extraction(es, seed):
-    yield from query_loop(es, seed, set(extract_keywords(seed)), set(), set(), 0)
+    yield from query_loop(es, seed, set(extract_keywords(seed)), querywords=set(), results=set(), depth=0)
 
 
 def query_loop(es, seed, keywords, querywords, results, depth):
@@ -77,7 +73,6 @@ def query_loop(es, seed, keywords, querywords, results, depth):
             if querywords not in results:
                 found, first = legal_query(es, seed, ' '.join(querywords))
                 if first:
-                    print('found')
                     result = frozenset(querywords)
                     results.add(result)
                     yield result
@@ -95,15 +90,8 @@ def read_json(path):
     return jsondata
 
 
-def start(es, seed):
-    count = 0
-    result = []
-    for keyquery in query_extraction(es, seed):
-        result.append(keyquery)
-        count += 1
-        print(keyquery)
-
-    return result
+def full_keyquery(es, seed):
+    return [keyquery for keyquery in query_extraction(es, seed)]
 
 
 def main():
@@ -120,7 +108,7 @@ def main():
     hit4 = es.search(index=INDEX_NAME,
                      body={"query": {"match": {"title": "Efficiently monitoring data-flow test coverage."}}})["hits"][
         "hits"][0]
-    start(es, hit3)
+    full_keyquery(es, hit3)
 
 
 if __name__ == '__main__':

@@ -6,6 +6,7 @@ import json
 import textrank
 import keyqueries
 
+
 class Searchengine():
 
     def __init__(self):
@@ -81,7 +82,7 @@ class Searchengine():
 
         print("Done indexing!!! Wuhu")
 
-    def insert_one_data(self,doc):
+    def insert_one_data(self, doc):
         res = self.es_client.index(index=self.INDEX_NAME, body=doc)
         print(res)
 
@@ -112,7 +113,7 @@ class Searchengine():
 
     def handle_query(self, query):
         """ Searches the user query and finds the best matches using elasticsearch."""
-        #query = input("Enter query: ")
+        # query = input("Enter query: ")
         # to search more then one field, use multi search api
         # search = {"size": SEARCH_SIZE,"query": {"match": {"title": query}}}
         search = {"size": self.SEARCH_SIZE, "query": {"multi_match": {"query": query, "fields": ["title", "authors"]}}}
@@ -126,8 +127,8 @@ class Searchengine():
                 }
             }
         }
-        #print(search)
-        response = self.es_client.search(index=self.INDEX_NAME, body=json.dumps(search))
+        # print(search)
+        response = self.es_client.search(index=self.INDEX_NAME, body=search)
         """
         print("{} total hits.".format(response["hits"]["total"]["value"]))
         for hit in response["hits"]["hits"]:
@@ -138,41 +139,35 @@ class Searchengine():
         return response
 
     def search(self):
-        query = []
-        query.append(input("Enter the paper(s) you want to keyquerie:"))
+        papers = []
         while True:
-            ask = input("Do you want to search (1) or add another paper (2)?")
-            if int(ask) == 1:
-                paper = {}
-                j = 0
-                for i in query:
-                    response = self.handle_query(i)
-                    for hit in response["hits"]["hits"]:
-                        paper[j] = hit
-                        j += 1
+            query = input("Enter the paper you want to keyquerie: (empty input to cancel)")
+            if not query:
                 break
-            if int(ask) == 2:
-                query.append(input("Enter the paper you want to add:"))
-            else:
-                print("Wrong input")
 
-        print("Please select the paper(s) you want to use like so ('1, 3, 10')")
-        for i in paper:
-            print(str(i) + " : " + paper[i]["_source"]["title"])
-        while True:
-            numbers = input()
-            numbers = numbers.split(",")
-            if numbers and all(elem.isdigit() for elem in numbers):
-                if numbers and all(paper.get(int(elem)) is not None for elem in numbers):
+            response = self.handle_query(query)
+
+            print("Please select the paper(s) you want to use like so ('1, 3, 10')")
+            print('\n'.join(
+                [f'{index} : {paper["_source"]["title"]}' for index, paper in enumerate(response["hits"]["hits"])]))
+
+            while True:
+                numbers = input()
+                numbers = numbers.split(",")
+                if all(elem.isdigit() and int(elem) in range(0, len(response["hits"]["hits"])) for elem in numbers):
+                    for n in numbers:
+                        papers.append(response["hits"]["hits"][int(n)])
                     break
                 else:
-                    print("You entered a number that is not listed")
-            else:
-                print("Wrong Input, pls try again!")
+                    print("Wrong Input, pls try again!")
 
-        """allinfo = ""
-        for i in numbers:
-            allinfo += paper[int(i)] + " " """
+            print('currently selected papers: [\n    {}\n]'.format(
+                "\n    ".join(paper['_source']['title'] for paper in papers)))
 
-        # k = keyqueries.start(self.es_client, list(paper.values()))
-        # print(k)
+            ask = input("Do you want to add another paper [Y/n]?")
+            if ask == 'n':
+                break
+
+        for seed in papers:
+            k = keyqueries.full_keyquery(self.es_client, seed)
+            print(f"{seed['_source']['title']} {k}")
