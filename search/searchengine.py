@@ -174,5 +174,5 @@ class Searchengine():
         for i in numbers:
             allinfo += paper[int(i)] + " " """
 
-        k = keyqueries.start(self.es_client, list(paper.values()))
-        print(k)
+        # k = keyqueries.start(self.es_client, list(paper.values()))
+        # print(k)
