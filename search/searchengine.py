@@ -58,7 +58,8 @@ class Searchengine():
                     "doi": {"type": "keyword"},
                     "authors": {"type": "text"},
                     "publisher": {"type": "text"},
-                    "booktitle": {"type": "text"}
+                    "booktitle": {"type": "text"},
+                    "keyqueries": {"type": "text"}
                 }
             }
         }
@@ -73,6 +74,33 @@ class Searchengine():
             print(str(ex))
         finally:
             return is_created
+
+    def iterate_all_doc(self, pagesize=100, scroll_timeout="1m"):
+        is_first = True
+        while True:
+            if is_first:
+                result = self.es_client.search(index= self.INDEX_NAME, scroll="1m",
+                                               body={"size" : pagesize})
+                is_first = False
+            else:
+                result = self.es_client.scroll(body={
+                    "scroll_id": scroll_id,
+                    "scroll": scroll_timeout})
+            scroll_id = result["_scroll_id"]
+            hits = result["hits"]["hits"]
+            if not hits:
+                break
+            yield from hits
+
+
+    def precalc_keyquerys(self):
+        for entry in self.iterate_all_doc(scroll_timeout="5m"):
+            kq = [list(x) for x in keyqueries.full_keyquery(self.es_client, entry)]
+            self.es_client.update(index=self.INDEX_NAME, id = entry["_id"], body={"doc": {"keyqueries": kq}})
+            print("Updated \"" + entry["_source"]["title"] + "\"")
+
+        print("Finished updating")
+
 
     def index_data(self, data, BATCH_SIZE=100000):
         """ Indexs all the rows in data"""
@@ -169,5 +197,6 @@ class Searchengine():
                 break
 
         for seed in papers:
+            print(seed)
             k = keyqueries.full_keyquery(self.es_client, seed)
             print(f"{seed['_source']['title']} {k}")
