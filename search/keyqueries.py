@@ -13,7 +13,7 @@ MAX_DEPTH = sys.maxsize
 def extract_keywords(seed):
     extractor = textrank.TextRank4Keyword()
     extractor.analyze(seed["_source"]["title"], candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=True)
-    keywords = extractor.get_keywords(10)
+    keywords = extractor.get_keywords(9)
     print(keywords)
     return keywords
 
@@ -108,7 +108,10 @@ def main():
     hit4 = es.search(index=INDEX_NAME,
                      body={"query": {"match": {"title": "Efficiently monitoring data-flow test coverage."}}})["hits"][
         "hits"][0]
-    full_keyquery(es, hit3)
+    hit4 = es.search(index=INDEX_NAME,
+                     body={"query": {"match": {"title": "Research of Survival-Time-Based Dynamic Adaptive Replica Allocation Algorithm in Mobile Ad Hoc Networks."}}})["hits"][
+        "hits"][0]
+    print(full_keyquery(es, hit4))
 
 
 if __name__ == '__main__':
