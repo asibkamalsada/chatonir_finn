@@ -66,7 +66,7 @@ def query_loop(es, seed, keywords, querywords, results, depth):
                     result = frozenset(querywords)
                     results.add(result)
                     yield result, score
-                    yield from query_loop(es, seed, keywords, querywords, results, depth + 1)
+                yield from query_loop(es, seed, keywords, querywords, results, depth + 1)
             keywords.add(next_)
             querywords.remove(next_)
 
