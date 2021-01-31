@@ -6,7 +6,8 @@ import json
 
 
 INDEX_NAME = "paper"
-MAX_SEARCH = 10000
+MAX_SEARCH = 1000
+
 MAX_DEPTH = sys.maxsize
 
 
@@ -43,22 +44,11 @@ def legal_query(es, seed, query):
 
     response = q(es, query, size)
 
-    found = False
+    for hit in response["hits"]["hits"]:
+        if hit["_id"] == seed["_id"]:
+            return True, hit["_score"]
 
-    ids = [hit['_id'] for hit in response["hits"]["hits"]]
-    try:
-        first = ids.index(seed['_id']) == 0
-        found = True
-    except ValueError:
-        first = False
-        while response["hits"]["total"]["value"] == size:
-            response = q(es, query, size, response["hits"]["hits"][-1]["sort"])
-            ids = [hit['_id'] for hit in response["hits"]["hits"]]
-            if seed['_id'] in ids:
-                found = True
-                break
-
-    return found, first
+    return False, -1
 
 
 def query_extraction(es, seed):
@@ -71,12 +61,11 @@ def query_loop(es, seed, keywords, querywords, results, depth):
             keywords.remove(next_)
             querywords.add(next_)
             if querywords not in results:
-                found, first = legal_query(es, seed, ' '.join(querywords))
-                if first:
+                found, score = legal_query(es, seed, ' '.join(querywords))
+                if found:
                     result = frozenset(querywords)
                     results.add(result)
-                    yield result
-                if found:
+                    yield result, score
                     yield from query_loop(es, seed, keywords, querywords, results, depth + 1)
             keywords.add(next_)
             querywords.remove(next_)
@@ -91,7 +80,7 @@ def read_json(path):
 
 
 def full_keyquery(es, seed):
-    return [keyquery for keyquery in query_extraction(es, seed)]
+    return {(keyquery, score) for keyquery, score in query_extraction(es, seed)}
 
 
 def main():
@@ -111,7 +100,7 @@ def main():
     hit4 = es.search(index=INDEX_NAME,
                      body={"query": {"match": {"title": "Research of Survival-Time-Based Dynamic Adaptive Replica Allocation Algorithm in Mobile Ad Hoc Networks."}}})["hits"][
         "hits"][0]
-    print(full_keyquery(es, hit4))
+    print(full_keyquery(es, hit2))
 
 
 if __name__ == '__main__':
