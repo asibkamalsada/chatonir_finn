@@ -1,7 +1,10 @@
+import itertools
+from collections import deque
+
 import PyPDF2
 from io import StringIO
 from elasticsearch import Elasticsearch
-from elasticsearch.helpers import bulk
+from elasticsearch.helpers import bulk, parallel_bulk
 import json
 import textrank
 import keyqueries
@@ -31,11 +34,17 @@ class Searchengine():
         file.close()
         return [title, creator, concat.getvalue().replace("\n", " ")]
 
+    def readJSON_(self, path):
+        with open(path, 'r', encoding='utf8') as file:
+            return [json.loads(line) for line in file.readlines()]
+
     def readJSON(self, path):
         with open(path, 'r', encoding='utf8') as file:
             return json.load(file)
 
-        return jsondata
+    def read2lines(self, path):
+        with open(path, 'r', encoding='utf8') as file:
+            return file.readlines()
 
     def create_index(self):
         """ Creates an Elasticsearch index."""
@@ -58,7 +67,8 @@ class Searchengine():
                     "authors": {"type": "text"},
                     "publisher": {"type": "text"},
                     "booktitle": {"type": "text"},
-                    "keyqueries": {"type": "text"}
+                    "keyqueries": {"type": "nested"},
+                    "abstract": {"type": "text"}
                 }
             }
         }
@@ -74,7 +84,7 @@ class Searchengine():
         finally:
             return is_created
 
-    def iterate_all_doc(self, pagesize=10000, scroll_timeout="10m"):
+    def chunk_iterate_docs(self, pagesize=10000, scroll_timeout="10m"):
         is_first = True
         while True:
             if is_first:
@@ -89,16 +99,7 @@ class Searchengine():
             hits = result["hits"]["hits"]
             if not hits:
                 break
-            yield from hits
-
-
-    def precalc_keyquerys(self):
-        for entry in self.iterate_all_doc(scroll_timeout="5m"):
-            kq = [list(x) for x in keyqueries.full_keyquery(self.es_client, entry)]
-            self.es_client.update(index=self.INDEX_NAME, id = entry["_id"], body={"doc": {"keyqueries": kq}})
-            print("Updated \"" + entry["_source"]["title"] + "\"")
-
-        print("Finished updating")
+            yield hits
 
     def index_data(self, data, batch_size=10000):
         """ Indexs all the rows in data"""
@@ -121,32 +122,32 @@ class Searchengine():
             request["_index"] = self.INDEX_NAME
             request["_source"] = doc
             requests.append(request)
-        bulk(self.es_client, requests)
+        deque(parallel_bulk(self.es_client, requests), maxlen=0)  # the deque stuff is just to discard results
 
     def createIndexAndIndexDocs(self, path):
         self.create_index()
-        self.index_data(self.readJSON(path))
+        self.index_data(self.readJSON_(path))
 
     def run_query_loop(self):
         """ Asks user to enter a query to search."""
         while True:
             try:
-                self.handle_query(input('enter query\n'))
+                self.title_search(input('enter query\n'))
             except KeyboardInterrupt:
                 break
         return
 
-    def handle_query(self, query):
+    def title_search(self, title):
         """ Searches the user query and finds the best matches using elasticsearch."""
         # query = input("Enter query: ")
         # to search more then one field, use multi search api
         # search = {"size": SEARCH_SIZE,"query": {"match": {"title": query}}}
-        search = {"size": self.SEARCH_SIZE, "query": {"multi_match": {"query": query, "fields": ["title", "authors"]}}}
+        search = {"size": self.SEARCH_SIZE, "query": {"multi_match": {"query": title, "fields": ["title", "authors"]}}}
         search = {
             "query": {
                 "match": {
                     "title": {
-                        "query": query,
+                        "query": title,
                         "operator": "and"
                     }
                 }
@@ -170,7 +171,7 @@ class Searchengine():
             if not query:
                 break
 
-            response = self.handle_query(query)
+            response = self.title_search(query)
 
             print("Please select the paper(s) you want to use like so ('1, 3, 10')")
             print('\n'.join(
@@ -193,7 +194,44 @@ class Searchengine():
             if ask == 'n':
                 break
 
-        for seed in papers:
-            print(seed)
-            k = keyqueries.full_keyquery(self.es_client, seed)
-            print(f"{seed['_source']['title']} {k}")
+        for paper in papers:
+            print(paper["_source"].get("keyqueries", "duh"))
+
+    def update_abstracts(self, path):
+        doi_abs = self.readJSON(path)
+        doi_id = {hit["_source"]["doi"]: hit["_id"] for hits in self.chunk_iterate_docs() for hit in hits}
+
+        gen = ((doi_id[d_a["doi"]], d_a["abstract"]) for d_a in doi_abs if d_a["doi"] in doi_id)
+
+        self.chunk_update_field("abstracts", gen)
+
+    def update_keyqueries(self):
+        chunk_size = 1000
+        k = keyqueries.Keyqueries()
+        for entries in self.chunk_iterate_docs(pagesize=chunk_size):
+            self.chunk_update_field("keyqueries",
+                                    ((entry["_id"], {" ".join(kws): score for (kws, score) in k.optimized(entry)}) for entry in entries),
+                                    chunk_size=chunk_size)
+
+    def chunk_update_field(self, field, gen, chunk_size=1000, page_size=None):
+        gen_ = ({"_index": self.INDEX_NAME,
+                 "_op_type": "update",
+                 "_id": _id,
+                 "doc": {field: value}} for _id, value in itertools.islice(gen, chunk_size))
+
+        if page_size:
+            if page_size <= chunk_size:
+                bulk(self.es_client, gen_)
+        else:
+            try:
+                while True:
+                    actions = [next(gen_)]
+                    bulk(self.es_client, actions)
+                    bulk(self.es_client, itertools.islice(gen_, chunk_size))
+            except StopIteration:
+                pass
+        print(f"{field} successfully read")
+
+    def print_kqs(self):
+        kqs = [hit["_source"].get("keyqueries", "") for hits in self.chunk_iterate_docs() for hit in hits]
+        print(len(kqs))
