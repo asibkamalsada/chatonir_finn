@@ -67,7 +67,7 @@ class Searchengine():
                     "authors": {"type": "text"},
                     "publisher": {"type": "text"},
                     "booktitle": {"type": "text"},
-                    "keyqueries": {"type": "nested"},
+                    "keyqueries": {"type": "flattened"},
                     "abstract": {"type": "text"}
                 }
             }
@@ -137,13 +137,14 @@ class Searchengine():
                 break
         return
 
-    def title_search(self, title):
+    def title_search(self, title, size=10000):
         """ Searches the user query and finds the best matches using elasticsearch."""
         # query = input("Enter query: ")
         # to search more then one field, use multi search api
         # search = {"size": SEARCH_SIZE,"query": {"match": {"title": query}}}
         search = {"size": self.SEARCH_SIZE, "query": {"multi_match": {"query": title, "fields": ["title", "authors"]}}}
         search = {
+            "size": size,
             "query": {
                 "match": {
                     "title": {
@@ -235,3 +236,9 @@ class Searchengine():
     def print_kqs(self):
         kqs = [hit["_source"].get("keyqueries", "") for hits in self.chunk_iterate_docs() for hit in hits]
         print(len(kqs))
+
+    def extract_json(self, search_phrase, file_name=None):
+        if not file_name:
+            file_name = f"{search_phrase}.json"
+        with open(file_name, "w") as file:
+            file.write(json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
