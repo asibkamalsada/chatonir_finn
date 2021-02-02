@@ -32,9 +32,8 @@ class Searchengine():
         return [title, creator, concat.getvalue().replace("\n", " ")]
 
     def readJSON(self, path):
-        jsondata = []
-        for line in open(path, 'r', encoding='utf8'):
-            jsondata.append(json.loads(line))
+        with open(path, 'r', encoding='utf8') as file:
+            return json.load(file)
 
         return jsondata
 
@@ -75,12 +74,12 @@ class Searchengine():
         finally:
             return is_created
 
-    def iterate_all_doc(self, pagesize=100, scroll_timeout="1m"):
+    def iterate_all_doc(self, pagesize=10000, scroll_timeout="10m"):
         is_first = True
         while True:
             if is_first:
-                result = self.es_client.search(index= self.INDEX_NAME, scroll="1m",
-                                               body={"size" : pagesize})
+                result = self.es_client.search(index=self.INDEX_NAME, scroll=scroll_timeout,
+                                               body={"query": {"match_all": {}}, "size": pagesize})
                 is_first = False
             else:
                 result = self.es_client.scroll(body={
@@ -101,34 +100,32 @@ class Searchengine():
 
         print("Finished updating")
 
-
-    def index_data(self, data, BATCH_SIZE=100000):
+    def index_data(self, data, batch_size=10000):
         """ Indexs all the rows in data"""
-        for doc in data:
-            self.insert_one_data(doc)
-            print(f'Indexed {doc} document.')
+        for chunk in [data[x:x + batch_size] for x in range(0, len(data), batch_size)]:
+            self.index_batch(chunk)
+            # print(f'Indexed {doc} document.')
 
         print("Done indexing!!! Wuhu")
 
     def insert_one_data(self, doc):
         res = self.es_client.index(index=self.INDEX_NAME, body=doc)
-        print(res)
+        # print(res)
 
     def index_batch(self, docs):
         """ Indexes a batch of documents."""
         requests = []
-        for i, doc in enumerate(docs):
-            request = doc
+        for doc in docs:
+            request = dict()
             request["_op_type"] = "index"
             request["_index"] = self.INDEX_NAME
-            request["body"] = doc['body']
+            request["_source"] = doc
             requests.append(request)
         bulk(self.es_client, requests)
 
     def createIndexAndIndexDocs(self, path):
-        data = self.readJSON(path)
         self.create_index()
-        self.index_data(data)
+        self.index_data(self.readJSON(path))
 
     def run_query_loop(self):
         """ Asks user to enter a query to search."""
