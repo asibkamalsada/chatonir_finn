@@ -1,5 +1,7 @@
 import itertools
-from collections import deque
+from collections import Counter
+
+import operator
 
 import PyPDF2
 from io import StringIO
@@ -199,8 +201,9 @@ class Searchengine():
             if ask == 'n':
                 break
 
-        for paper in papers:
-            print(paper["_source"].get("keyqueries", "duh"))
+        print(self.select_keyquerie(papers))
+        #for paper in papers:
+        #    print(paper["_source"].get("keyqueries", "duh"))
 
     def update_abstracts(self, path):
         doi_abs = self.readJSON(path)
@@ -246,3 +249,98 @@ class Searchengine():
             file_name = f"{search_phrase}.json"
         with open(file_name, "w") as file:
             file.write(json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
+
+
+    def select_keyquerie(self, papers):
+        alldic = []
+        for paper in papers:
+            alldic.append(paper["_source"].get("keyqueries"))
+        allkeys = []
+        for dic in alldic:
+            for key in dic:
+                allkeys.append(key)
+        revindex = Counter(allkeys)
+        # option 1
+        print([k for k,v in revindex.items() if float(v) == revindex.most_common(1)[0][1]])
+
+        candidates = [k for k,v in revindex.items() if float(v) >= len(papers)]
+        if candidates:
+            score = 0
+            for temp in candidates:
+                aver = 0
+                for number in alldic:
+                    aver += number[temp]
+                maybe = aver / len(papers)
+                if maybe > score:
+                    score = maybe
+                else:
+                    candidates.remove(temp)
+            return "Option 1: " + str(candidates)
+
+        # option 2
+        print(revindex.most_common(1))
+        if revindex.most_common(1)[0][1] > 1:
+            candidates = [k for k,v in revindex.items() if float(v) == revindex.most_common(1)[0][1]]
+            unoccourrentpaper = {}
+            for candidate in candidates:
+                unoccourrentpaper[candidate] = [paper["_source"]["title"] for paper in papers if candidate not in paper["_source"].get("keyqueries")]
+            score = 0
+            query = ""
+            for kq in unoccourrentpaper:
+                temp = 0
+                for pap in unoccourrentpaper[kq]:
+                    query_body = {
+                        "size": 100000,
+                        "query": {
+                            "multi_match": {
+                                "query": kq,
+                                "fields": ["title", "abstract"],
+                                "operator": "and"
+                            },
+                        },
+                    }
+                    responses = self.es_client.search(body=query)
+                    print(pap)
+                    print([lel["_score"] for lel in responses["hits"]["hits"] if lel["_source"]["title"] == pap])
+        else:
+            return "Those paper are not compatible for the keyquerie search. Sorry."
+
+        #if list(x.values()).__contains__(len(papers)):
+        '''
+
+
+
+        match = []
+        for key in papers[0]["_source"].get("keyqueries"):
+            bool = True
+            for paper in papers:
+                if key not in paper["_source"].get("keyqueries"):
+                    bool = False
+
+            if bool:
+                match.append(key)
+
+        if match:
+            max = 0
+            result = ""
+            for canidate in match:
+                score = 0
+                for paper in papers:
+                    score = paper["_source"].get("keyqueries")[canidate] + score
+                score = score/len(papers)
+                if score > max:
+                    max = score
+                    result = canidate
+
+            return result
+
+        #case 2
+        if not match:
+            matches = {}
+            for paper in papers:
+                for key in paper["_source"].get("keyqueries"):
+                    ocurrence = 0
+                    for temp in papers:
+                        if temp["_source"].get("keyqueries").keys().contains(key):
+                            ocurrence += 1
+'''
