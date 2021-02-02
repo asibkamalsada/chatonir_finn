@@ -9,19 +9,28 @@ def main():
     # se.createIndexAndIndexDocs("dump_no_bodytext.json")
     t2 = time.time()
     print(t2-t1)
-    se.extract_json("test", "test.json")
-    se.index_data(se.readJSON("test.json"))
-    # se.update_abstracts("abstracts.json")
+    # se.extract_json("test", "test.json")
+    se.createIndexAndIndexDocs("test.json")
     t3 = time.time()
     print(t3-t2)
-    # se.update_keyqueries()
+    se.update_abstracts("abstracts.json")
     t4 = time.time()
     print(t4-t3)
-    # se.print_kqs()
-    hits = [hit for hits in se.chunk_iterate_docs(1000) for hit in hits]
+    se.update_keyqueries()
+    t5 = time.time()
+    print(t5-t4)
+    hits = [hit for hits in se.chunk_iterate_docs() for hit in hits]
+    print(len(hits))
+    se.print_kqs()
+    se.search()
+
+
+"""
+    hits = [hit for hits in se.chunk_iterate_docs() for hit in hits]
     for hit in hits:
         print(hit)
-    se.search()
+"""
+
 
 
 if __name__ == '__main__':

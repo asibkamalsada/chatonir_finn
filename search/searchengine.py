@@ -84,12 +84,12 @@ class Searchengine():
         finally:
             return is_created
 
-    def chunk_iterate_docs(self, pagesize=10000, scroll_timeout="10m"):
+    def chunk_iterate_docs(self, pagesize=10000, scroll_timeout="3m"):
         is_first = True
         while True:
             if is_first:
                 result = self.es_client.search(index=self.INDEX_NAME, scroll=scroll_timeout,
-                                               body={"query": {"match_all": {}}, "size": pagesize})
+                                               body={"size": pagesize})
                 is_first = False
             else:
                 result = self.es_client.scroll(body={
@@ -122,11 +122,15 @@ class Searchengine():
             request["_index"] = self.INDEX_NAME
             request["_source"] = doc
             requests.append(request)
-        deque(parallel_bulk(self.es_client, requests), maxlen=0)  # the deque stuff is just to discard results
+        bulk(self.es_client, requests, refresh=True)
+
+    def createIndexAndIndexDocs_(self, path):
+        self.create_index()
+        self.index_data(self.readJSON_(path))
 
     def createIndexAndIndexDocs(self, path):
         self.create_index()
-        self.index_data(self.readJSON_(path))
+        self.index_data(self.readJSON(path))
 
     def run_query_loop(self):
         """ Asks user to enter a query to search."""
