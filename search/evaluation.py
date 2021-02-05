@@ -29,7 +29,7 @@ def evaluate(new_index=False):
             papers.append(response["hits"]["hits"][0])
         kq = se.select_keyquerie(papers)
         score = 0
-        score_this = se.normal_search(kq[0])
+        score_this = se.normal_search(kq[0], size=1000)
         for x in queryinputs[tuple(i)]:
             for hit in score_this["hits"]["hits"]:
                 if hit["_source"]["title"] == x:

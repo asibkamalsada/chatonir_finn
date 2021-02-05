@@ -1,5 +1,7 @@
 import itertools
-from collections import Counter
+from collections import Counter, Iterable
+from statistics import mean
+from typing import Any, Dict, Set
 
 import PyPDF2
 from io import StringIO
@@ -15,7 +17,7 @@ def print_return(param):
     return param
 
 
-class Searchengine():
+class Searchengine:
 
     def __init__(self):
         self.INDEX_NAME = "paper"
@@ -91,24 +93,21 @@ class Searchengine():
         finally:
             return is_created
 
-    def chunk_iterate_docs(self, page_size=10000, scroll_timeout="3m"):
+    def chunk_iterate_docs(self, page_size=10000):
         if page_size > 10000:
             page_size = 10000
-        is_first = True
-        while True:
-            if is_first:
-                result = self.es_client.search(index=self.INDEX_NAME, scroll=scroll_timeout,
-                                               body={"size": page_size})
-                is_first = False
-            else:
-                result = self.es_client.scroll(body={
-                    "scroll_id": scroll_id,
-                    "scroll": scroll_timeout})
-            scroll_id = result["_scroll_id"]
-            hits = result["hits"]["hits"]
-            if not hits:
-                break
-            yield hits
+
+        query = {
+            "size": page_size,
+            "sort": [{"_doc": "asc"}]
+        }
+
+        response = self.es_client.search(body=query, index=self.INDEX_NAME)
+
+        while response["hits"]["hits"]:
+            yield response["hits"]["hits"]
+            query["search_after"] = response["hits"]["hits"][-1]["sort"]
+            response = self.es_client.search(body=query, index=self.INDEX_NAME)
 
     def index_data(self, data, batch_size=10000):
         """ Indexs all the rows in data"""
@@ -152,10 +151,6 @@ class Searchengine():
 
     def title_search(self, title, size=10000):
         """ Searches the user query and finds the best matches using elasticsearch."""
-        # query = input("Enter query: ")
-        # to search more then one field, use multi search api
-        # search = {"size": SEARCH_SIZE,"query": {"match": {"title": query}}}
-        search = {"size": self.SEARCH_SIZE, "query": {"multi_match": {"query": title, "fields": ["title", "authors"]}}}
         search = {
             "size": size,
             "query": {
@@ -167,37 +162,22 @@ class Searchengine():
                 }
             }
         }
-        # print(search)
-        response = self.es_client.search(index=self.INDEX_NAME, body=search)
-        """
-        print("{} total hits.".format(response["hits"]["total"]["value"]))
-        for hit in response["hits"]["hits"]:
-            print("id: {}, score: {}".format(hit["_id"], hit["_score"]))
-            print(hit["_source"]["title"])
-            print()
-        """
-        return response
+        return self.es_client.search(index=self.INDEX_NAME, body=search)
 
     def normal_search(self, query, size=10000):
         """ Searches the user query and finds the best matches using elasticsearch."""
-        # query = input("Enter query: ")
-        # to search more then one field, use multi search api
-        # search = {"size": SEARCH_SIZE,"query": {"match": {"title": query}}}
         search = {
-            "size": 10000,
+            "size": size,
             "query": {
                 "multi_match": {
                     "query": query,
-                    "fields": ["title", "abstract"],
-                    "operator": "and"
+                    "fields": ["title", "abstract", "fulltext"]
                 },
             },
         }
-        # print(search)
-        response = self.es_client.search(index=self.INDEX_NAME, body=search)
-        return response
+        return self.es_client.search(index=self.INDEX_NAME, body=search)
 
-    def search(self):
+    def start(self):
         papers = []
         while True:
             query = input("Enter the paper you want to keyquerie: (empty input to cancel)")
@@ -216,6 +196,8 @@ class Searchengine():
 
             while True:
                 numbers = input()
+                if not numbers:
+                    break
                 numbers = numbers.split(",")
                 if all(elem.isdigit() and int(elem) in range(0, len(response["hits"]["hits"])) for elem in numbers):
                     for n in numbers:
@@ -231,9 +213,8 @@ class Searchengine():
             if ask == 'n':
                 break
 
-        print(self.select_keyquerie(papers))
-        #for paper in papers:
-        #    print(paper["_source"].get("keyqueries", "duh"))
+        print(self.select_keyqueries(papers))
+        # print(self.select_keyquerie(papers))
 
     def fill_documents(self, path):
         docs = self.readJSON(path)
@@ -250,18 +231,32 @@ class Searchengine():
     def update_keyqueries(self):
         chunk_size = 1000
         k = keyqueries.Keyqueries()
+
+        def create_kq_dict(entry):
+            return {" ".join(kws): score for (kws, score) in k.single_kq(entry["_id"], keywordss[entry["_id"]])}
+
         for entries in self.chunk_iterate_docs(page_size=chunk_size):
             keywordss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
             self.chunk_update_field(((_id, {"keywords": keywords}) for (_id, keywords) in keywordss.items()),
                                     page_size=chunk_size)
-            self.chunk_update_field(((entry["_id"], {"keyqueries": {" ".join(kws): score for (kws, score) in k.optimized(entry["_id"], keywordss[entry["_id"]])}}) for entry in entries),
+            # every "_id" has a field called "keyqueries" which contains a dict consisting of a space separated
+            # concatenation of the keywords of the keyquery and the score of the respective "_id" regarding
+            # this particular keyquery
+            self.chunk_update_field(((entry["_id"], {"keyqueries": create_kq_dict(entry)}) for entry in entries),
                                     page_size=chunk_size)
 
     def chunk_update_field(self, gen, chunk_size=1000, page_size=None):
+        """
+
+        :param gen: iterable yielding at most page_size update lines
+        :param chunk_size: batching the update process via bulk(client, update) in steps of size chunk_size
+        :param page_size: how many updates are retrievable by gen
+        :return: None
+        """
         gen_ = ({"_index": self.INDEX_NAME,
                  "_op_type": "update",
                  "_id": _id,
-                 "doc": p(fields)} for (_id, fields) in itertools.islice(gen, chunk_size))
+                 "doc": print_return(fields)} for (_id, fields) in itertools.islice(gen, chunk_size))
 
         if page_size:
             if page_size <= chunk_size:
@@ -278,16 +273,14 @@ class Searchengine():
         print(f"{page_size} documents successfully read")
 
     def debug_print(self):
-        kqs = "\n".join([str(hit["_source"]) for hits in self.chunk_iterate_docs() for hit in hits])
-        print(kqs)
-        print(len(kqs))
+        print(sum(len(hits) for hits in self.chunk_iterate_docs()))
 
     def extract_json(self, search_phrase, file_name=None):
         if not file_name:
             file_name = f"{search_phrase}.json"
         with open(file_name, "w") as file:
-            file.write(json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
-
+            file.write(
+                json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
 
     def select_keyquerie(self, papers):
         alldic = []
@@ -298,12 +291,12 @@ class Searchengine():
             for key in dic:
                 allkeys.append(key)
         u = [dics.keys() | set() for dics in alldic]
-        #print(u)
+        # print(u)
         test = set.intersection(*u)
-        #print(test)
+        # print(test)
         revindex = Counter(allkeys)
         # option 1
-        candidates = [k for k,v in revindex.items() if float(v) >= len(papers)]
+        candidates = [k for k, v in revindex.items() if float(v) >= len(papers)]
         if candidates:
             score = 0
             for temp in candidates:
@@ -322,10 +315,11 @@ class Searchengine():
         print("OPTION 2 (is a dummy return)-------------------------")
         print(revindex.most_common(1)[0][0])
         if revindex.most_common(1)[0][1] > 1:
-            candidates = [k for k,v in revindex.items() if float(v) == revindex.most_common(1)[0][1]]
+            candidates = [k for k, v in revindex.items() if float(v) == revindex.most_common(1)[0][1]]
             unoccourrentpaper = {}
             for candidate in candidates:
-                unoccourrentpaper[candidate] = [paper["_source"]["title"] for paper in papers if candidate not in paper["_source"].get("keyqueries")]
+                unoccourrentpaper[candidate] = [paper["_source"]["title"] for paper in papers if
+                                                candidate not in paper["_source"].get("keyqueries")]
             score = 0
             query = ""
             for kq in unoccourrentpaper:
@@ -342,9 +336,51 @@ class Searchengine():
                         },
                     }
                     responses = self.es_client.search(body=query_body)
-                    #print(pap)
-                    #print([lel["_score"] for lel in responses["hits"]["hits"] if lel["_source"]["title"] == pap])
+                    # print(pap)
+                    # print([lel["_score"] for lel in responses["hits"]["hits"] if lel["_source"]["title"] == pap])
                     print("--------------------------------")
                     return revindex.most_common(1)[0][0]
         else:
             return "Those paper are not compatible for the keyquerie search. Sorry."
+
+    def select_keyqueries(self, docs_p):
+        docs = []
+        for doc_p in docs_p:
+            doc = dict()
+            doc["_id"] = doc_p["_id"]
+            doc["keyqueries"] = {frozenset(kq_str.split()): score
+                                 for kq_str, score in doc_p["_source"]["keyqueries"].items()}
+            docs.append(doc)
+
+        id_src = {doc["_id"]: doc["keyqueries"] for doc in docs}
+
+        kqs = set(kq for doc in docs for kq, score in doc["keyqueries"].items())
+
+        ms = {kq: set(doc["_id"] for doc in docs if kq in doc["keyqueries"]) for kq in kqs}
+
+        def kq_sort(kq__doc_ids):
+            """
+            :param kq__doc_ids: tuple in ms.items(), 1st is a keyquery and 2nd is the set of ids of the corresponding docs
+            :return: a tuple, 1st is the amount of corresponding docs and second the avg of the scores of the kq across the docs
+            """
+            kq = kq__doc_ids[0]
+            doc_ids = kq__doc_ids[1]
+            return len(doc_ids), mean(id_src[_id].get(kq) for _id in doc_ids)
+
+        ms = dict(sorted(ms.items(), key=kq_sort, reverse=True))
+
+        return self.greedy(ms, set(id_src.keys()))
+
+    def greedy(self, ms, _ids):
+        found_docs = set()
+        solution = dict()
+        for kq, kq_docs in ms.items():
+            if not kq_docs.issubset(found_docs):
+                solution[kq] = kq_docs
+                found_docs.update(kq_docs)
+                if found_docs == _ids:
+                    break
+        return solution
+
+    def full_text_search(self):
+        pass

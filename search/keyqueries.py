@@ -1,5 +1,6 @@
 import sys
 import time
+from functools import reduce
 
 import textrank
 from elasticsearch import Elasticsearch
@@ -20,15 +21,20 @@ class Keyqueries:
         source = seed["_source"]
         self.extractor.analyze(f'{source.get("abstract", "")}\n{source.get("title", "")}\n{source.get("fulltext", "")}',
                                candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=True)
-        keywords = self.extractor.get_keywords(9)
-        # print(keywords)
-        return keywords
+        keywords_dict = self.extractor.get_keywords(9)
+        # print(keywords_dict)
+        return keywords_dict
 
-    def optimized(self, _id, keyword_dict):
-        keywords = [*keyword_dict]
+    def single_kq(self, _id, keywords):
+        for qws, seed_scores in self.multi_kq([_id], keywords):
+            yield qws, seed_scores[_id]
+
+    def multi_kq(self, _ids, keywords):
+        if isinstance(keywords, dict):
+            keywords = [*keywords]
         querywordss = [tuple(keywords[index] for index in range(0, len(keywords)) if 1 << index & bitcode) for bitcode
                        in range(0, 2 ** len(keywords))]
-        chunk_size = 2 ** len(keywords)  # this actually means all at once
+        chunk_size = 2 ** (len(keywords) - 1)  # this actually means chunk_size = half of amount of possible keyqueries
         query_header = {"index": self.INDEX_NAME}
 
         for chunk in [querywordss[x:x + chunk_size] for x in range(0, len(querywordss), chunk_size)]:
@@ -48,10 +54,18 @@ class Keyqueries:
                 query.append(query_body)
             responses = self.es.msearch(body=query, request_timeout=100)["responses"]
             for qws, response in zip(chunk, responses):
+                seed_scores = dict()
                 for hit in response["hits"]["hits"]:
-                    if hit["_id"] == _id:
-                        yield qws, hit["_score"]
-                        break
+                    if hit["_id"] in _ids:
+                        seed_scores[hit["_id"]] = hit["_score"]
+                        if len(seed_scores) == len(_ids):
+                            break
+                if seed_scores:
+                    yield qws, seed_scores
+
+    def best_kq(self, _ids, keywords):
+        kqs = {sum(seed_scores.values()): (kq, seed_scores) for kq, seed_scores in self.multi_kq(_ids, keywords)}
+        return kqs[max(kqs)]
 
 
 def main():
@@ -71,7 +85,7 @@ def main():
 
     startx = time.time()
 
-    print(dict(k.optimized(hit1["_id"], k.extract_keywords(hit1))))
+    print(dict(k.single_kq(hit1["_id"], k.extract_keywords(hit1))))
 
     print(time.time() - startx)
 
