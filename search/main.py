@@ -13,16 +13,16 @@ def main():
     se.createIndexAndIndexDocs("test.json")
     t3 = time.time()
     print(t3 - t2)
-    se.update_abstracts("abstracts.json")
+    # se.fill_documents("fulltexts.json")
     t4 = time.time()
     print(t4 - t3)
     se.update_keyqueries()
     t5 = time.time()
     print(t5 - t4)
-    hits = [hit for hits in se.chunk_iterate_docs() for hit in hits]
-    print(len(hits))
-    se.print_kqs()
-    se.search()
+    # hits = [hit for hits in se.chunk_iterate_docs() for hit in hits]
+    # print(len(hits))
+    se.debug_print()
+    # se.search()
 
 
 """

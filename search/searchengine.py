@@ -1,15 +1,18 @@
 import itertools
 from collections import Counter
 
-import operator
-
 import PyPDF2
 from io import StringIO
 from elasticsearch import Elasticsearch
-from elasticsearch.helpers import bulk, parallel_bulk
+from elasticsearch.helpers import bulk
 import json
-import textrank
+
 import keyqueries
+
+
+def print_return(param):
+    print(param)
+    return param
 
 
 class Searchengine():
@@ -67,14 +70,16 @@ class Searchengine():
                     "dblpKey": {"type": "keyword"},
                     "doi": {"type": "keyword"},
                     "authors": {"type": "text"},
-                    "publisher": {"type": "text"},
+                    "publisher": {"type": "keyword"},
                     "booktitle": {"type": "text"},
                     "keyqueries": {"type": "flattened"},
-                    "abstract": {"type": "text"}
-                }
-            }
+                    "keywords": {"type": "flattened"},
+                    "abstract": {"type": "text"},
+                    "fulltext": {"type": "text"}
+                },
+            },
         }
-        print('Creating `Paper` index...')
+        print(f'Creating {self.INDEX_NAME} index...')
         try:
             if self.es_client.indices.exists(self.INDEX_NAME):
                 self.es_client.indices.delete(index=self.INDEX_NAME, ignore=[404])
@@ -86,12 +91,14 @@ class Searchengine():
         finally:
             return is_created
 
-    def chunk_iterate_docs(self, pagesize=10000, scroll_timeout="3m"):
+    def chunk_iterate_docs(self, page_size=10000, scroll_timeout="3m"):
+        if page_size > 10000:
+            page_size = 10000
         is_first = True
         while True:
             if is_first:
                 result = self.es_client.search(index=self.INDEX_NAME, scroll=scroll_timeout,
-                                               body={"size": pagesize})
+                                               body={"size": page_size})
                 is_first = False
             else:
                 result = self.es_client.scroll(body={
@@ -205,32 +212,39 @@ class Searchengine():
         #for paper in papers:
         #    print(paper["_source"].get("keyqueries", "duh"))
 
-    def update_abstracts(self, path):
-        doi_abs = self.readJSON(path)
+    def fill_documents(self, path):
+        docs = self.readJSON(path)
         doi_id = {hit["_source"]["doi"]: hit["_id"] for hits in self.chunk_iterate_docs() for hit in hits}
 
-        gen = ((doi_id[d_a["doi"]], d_a["abstract"]) for d_a in doi_abs if d_a["doi"] in doi_id)
+        gen = ((doi_id[doc["doi"]], {
+            "abstract": doc.get("abstract"),
+            "fulltext": doc.get("fulltext"),
+            "acmId": doc.get("acmId")
+        }) for doc in docs if doc["doi"] in doi_id)
 
-        self.chunk_update_field("abstracts", gen)
+        self.chunk_update_field(gen)
 
     def update_keyqueries(self):
         chunk_size = 1000
         k = keyqueries.Keyqueries()
-        for entries in self.chunk_iterate_docs(pagesize=chunk_size):
-            self.chunk_update_field("keyqueries",
-                                    ((entry["_id"], {" ".join(kws): score for (kws, score) in k.optimized(entry)}) for entry in entries),
-                                    chunk_size=chunk_size)
+        for entries in self.chunk_iterate_docs(page_size=chunk_size):
+            keywordss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
+            self.chunk_update_field(((_id, {"keywords": keywords}) for (_id, keywords) in keywordss.items()),
+                                    page_size=chunk_size)
+            self.chunk_update_field(((entry["_id"], {"keyqueries": {" ".join(kws): score for (kws, score) in k.optimized(entry["_id"], keywordss[entry["_id"]])}}) for entry in entries),
+                                    page_size=chunk_size)
 
-    def chunk_update_field(self, field, gen, chunk_size=1000, page_size=None):
+    def chunk_update_field(self, gen, chunk_size=1000, page_size=None):
         gen_ = ({"_index": self.INDEX_NAME,
                  "_op_type": "update",
                  "_id": _id,
-                 "doc": {field: value}} for _id, value in itertools.islice(gen, chunk_size))
+                 "doc": p(fields)} for (_id, fields) in itertools.islice(gen, chunk_size))
 
         if page_size:
             if page_size <= chunk_size:
                 bulk(self.es_client, gen_)
         else:
+            page_size = "unknown amount of"
             try:
                 while True:
                     actions = [next(gen_)]
@@ -238,10 +252,11 @@ class Searchengine():
                     bulk(self.es_client, itertools.islice(gen_, chunk_size))
             except StopIteration:
                 pass
-        print(f"{field} successfully read")
+        print(f"{page_size} documents successfully read")
 
-    def print_kqs(self):
-        kqs = [hit["_source"].get("keyqueries", "") for hits in self.chunk_iterate_docs() for hit in hits]
+    def debug_print(self):
+        kqs = "\n".join([str(hit["_source"]) for hits in self.chunk_iterate_docs() for hit in hits])
+        print(kqs)
         print(len(kqs))
 
     def extract_json(self, search_phrase, file_name=None):

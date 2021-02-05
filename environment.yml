@@ -1,5 +1,12 @@
 name: chatonir_finn
+channels:
+  - conda-forge
+  - defaults
 dependencies:
-- python=3.7
+- python=3.8
 - elasticsearch=7.10.0
 - pypdf2=1.26.0
+- numpy=1.19.2
+- spacy=2.3.5
+- spacy-model-en_core_web_sm=2
+- nltk=3.5

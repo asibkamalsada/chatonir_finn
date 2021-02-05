@@ -7,7 +7,7 @@ from spacy.lang.en.stop_words import STOP_WORDS
 nlp = spacy.load('en_core_web_sm')
 
 
-class TextRank4Keyword():
+class TextRank4Keyword:
     """Extract keywords from text"""
 
     def __init__(self):
@@ -84,14 +84,18 @@ class TextRank4Keyword():
 
     def get_keywords(self, number=10):
         """Print top number keywords"""
-        return [x for x, _ in sorted(self.node_weight.items(), key=lambda t: t[1], reverse=True)][:number]
+        return {x: y for x, y in sorted(self.node_weight.items(), key=lambda t: t[1], reverse=True)[:number]}
 
     def analyze(self, text,
-                candidate_pos=['NOUN', 'PROPN'],
-                window_size=4, lower=False, stopwords=list()):
+                candidate_pos=None,
+                window_size=4, lower=False, stopwords=None):
         """Main function to analyze text"""
 
         # Set stop words
+        if stopwords is None:
+            stopwords = list()
+        if candidate_pos is None:
+            candidate_pos = ['NOUN', 'PROPN']
         self.set_stopwords(stopwords)
 
         # Pare text by spaCy
