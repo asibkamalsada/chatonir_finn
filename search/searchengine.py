@@ -206,6 +206,10 @@ class Searchengine():
 
             response = self.title_search(query)
 
+            if response["hits"]["total"]["value"] == 0:
+                print("no documents found, specify another search string please")
+                continue
+
             print("Please select the paper(s) you want to use like so ('1, 3, 10')")
             print('\n'.join(
                 [f'{index} : {paper["_source"]["title"]}' for index, paper in enumerate(response["hits"]["hits"])]))
