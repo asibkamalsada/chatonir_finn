@@ -1,14 +1,10 @@
 import itertools
 from collections import Counter
-
-import operator
-
 import PyPDF2
 from io import StringIO
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk, parallel_bulk
 import json
-import textrank
 import keyqueries
 
 
@@ -171,6 +167,25 @@ class Searchengine():
         """
         return response
 
+    def normal_search(self, query, size=10000):
+        """ Searches the user query and finds the best matches using elasticsearch."""
+        # query = input("Enter query: ")
+        # to search more then one field, use multi search api
+        # search = {"size": SEARCH_SIZE,"query": {"match": {"title": query}}}
+        search = {
+            "size": 10000,
+            "query": {
+                "multi_match": {
+                    "query": query,
+                    "fields": ["title", "abstract"],
+                    "operator": "and"
+                },
+            },
+        }
+        # print(search)
+        response = self.es_client.search(index=self.INDEX_NAME, body=search)
+        return response
+
     def search(self):
         papers = []
         while True:
@@ -259,10 +274,12 @@ class Searchengine():
         for dic in alldic:
             for key in dic:
                 allkeys.append(key)
+        u = [dics.keys() | set() for dics in alldic]
+        #print(u)
+        test = set.intersection(*u)
+        #print(test)
         revindex = Counter(allkeys)
         # option 1
-        print([k for k,v in revindex.items() if float(v) == revindex.most_common(1)[0][1]])
-
         candidates = [k for k,v in revindex.items() if float(v) >= len(papers)]
         if candidates:
             score = 0
@@ -278,7 +295,9 @@ class Searchengine():
             return "Option 1: " + str(candidates)
 
         # option 2
-        print(revindex.most_common(1))
+        print("")
+        print("OPTION 2 (is a dummy return)-------------------------")
+        print(revindex.most_common(1)[0][0])
         if revindex.most_common(1)[0][1] > 1:
             candidates = [k for k,v in revindex.items() if float(v) == revindex.most_common(1)[0][1]]
             unoccourrentpaper = {}
@@ -290,7 +309,7 @@ class Searchengine():
                 temp = 0
                 for pap in unoccourrentpaper[kq]:
                     query_body = {
-                        "size": 100000,
+                        "size": 10000,
                         "query": {
                             "multi_match": {
                                 "query": kq,
@@ -299,48 +318,10 @@ class Searchengine():
                             },
                         },
                     }
-                    responses = self.es_client.search(body=query)
-                    print(pap)
-                    print([lel["_score"] for lel in responses["hits"]["hits"] if lel["_source"]["title"] == pap])
+                    responses = self.es_client.search(body=query_body)
+                    #print(pap)
+                    #print([lel["_score"] for lel in responses["hits"]["hits"] if lel["_source"]["title"] == pap])
+                    print("--------------------------------")
+                    return revindex.most_common(1)[0][0]
         else:
             return "Those paper are not compatible for the keyquerie search. Sorry."
-
-        #if list(x.values()).__contains__(len(papers)):
-        '''
-
-
-
-        match = []
-        for key in papers[0]["_source"].get("keyqueries"):
-            bool = True
-            for paper in papers:
-                if key not in paper["_source"].get("keyqueries"):
-                    bool = False
-
-            if bool:
-                match.append(key)
-
-        if match:
-            max = 0
-            result = ""
-            for canidate in match:
-                score = 0
-                for paper in papers:
-                    score = paper["_source"].get("keyqueries")[canidate] + score
-                score = score/len(papers)
-                if score > max:
-                    max = score
-                    result = canidate
-
-            return result
-
-        #case 2
-        if not match:
-            matches = {}
-            for paper in papers:
-                for key in paper["_source"].get("keyqueries"):
-                    ocurrence = 0
-                    for temp in papers:
-                        if temp["_source"].get("keyqueries").keys().contains(key):
-                            ocurrence += 1
-'''
