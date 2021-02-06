@@ -5,7 +5,7 @@ from typing import Any, Dict, Set
 
 import PyPDF2
 from io import StringIO
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, ElasticsearchException
 from elasticsearch.helpers import bulk
 import json
 
@@ -13,7 +13,7 @@ import keyqueries
 
 
 def print_return(param):
-    print(param)
+    # print(param)
     return param
 
 
@@ -229,21 +229,32 @@ class Searchengine:
         self.chunk_update_field(gen)
 
     def update_keyqueries(self):
-        chunk_size = 1000
+        chunk_size = 10000
         k = keyqueries.Keyqueries()
 
         def create_kq_dict(entry):
             return {" ".join(kws): score for (kws, score) in k.single_kq(entry["_id"], keywordss[entry["_id"]])}
 
         for entries in self.chunk_iterate_docs(page_size=chunk_size):
-            keywordss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
-            self.chunk_update_field(((_id, {"keywords": keywords}) for (_id, keywords) in keywordss.items()),
-                                    page_size=chunk_size)
-            # every "_id" has a field called "keyqueries" which contains a dict consisting of a space separated
-            # concatenation of the keywords of the keyquery and the score of the respective "_id" regarding
-            # this particular keyquery
-            self.chunk_update_field(((entry["_id"], {"keyqueries": create_kq_dict(entry)}) for entry in entries),
-                                    page_size=chunk_size)
+            entries = [entry for entry in entries if entry["_source"].get("keyqueries", -1) == -1]
+            print(len(entries))
+            if entries:
+                print(entries[0])
+                print(f"did not read chunk of {chunk_size}")
+                keywordss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
+                try:
+                    self.chunk_update_field(((_id, {"keywords": keywords}) for (_id, keywords) in keywordss.items()),
+                                            page_size=len(entries))
+                    # every "_id" has a field called "keyqueries" which contains a dict consisting of a space separated
+                    # concatenation of the keywords of the keyquery and the score of the respective "_id" regarding
+                    # this particular keyquery
+                    self.chunk_update_field(((entry["_id"], {"keyqueries": create_kq_dict(entry)}) for entry in entries),
+                                            page_size=len(entries))
+                except ElasticsearchException:
+                    print(ElasticsearchException)
+                    print("exception occured")
+            else:
+                print(f"already read chunk of {chunk_size}")
 
     def chunk_update_field(self, gen, chunk_size=1000, page_size=None):
         """
