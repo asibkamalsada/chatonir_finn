@@ -30,6 +30,8 @@ class Keyqueries:
             yield qws, seed_scores[_id]
 
     def multi_kq(self, _ids, keywords):
+        if not keywords:
+            return
         if isinstance(keywords, dict):
             keywords = [*keywords]
         querywordss = [tuple(keywords[index] for index in range(0, len(keywords)) if 1 << index & bitcode) for bitcode
@@ -69,6 +71,11 @@ class Keyqueries:
 
 
 def main():
+    k = Keyqueries()
+    print(list(k.single_kq(_id=None, keywords=[])))
+
+
+"""    
     bitcodes = range(0, 181)
     print(bitcodes)
     chunk_size = 10
@@ -94,7 +101,6 @@ def main():
     print(time.time() - start152)
 
 
-"""
     bitcodes = range(0, 181)
     print(bitcodes)
     chunk_size = 10
