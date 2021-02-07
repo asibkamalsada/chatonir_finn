@@ -36,7 +36,8 @@ class Keyqueries:
             keywords = [*keywords]
         querywordss = [tuple(keywords[index] for index in range(0, len(keywords)) if 1 << index & bitcode) for bitcode
                        in range(0, 2 ** len(keywords))]
-        chunk_size = 2 ** (len(keywords) - 1)  # this actually means chunk_size = half of amount of possible keyqueries
+        # this actually means chunk_size = half of amount of possible keyqueries or 10000
+        chunk_size = min(2 ** (len(keywords) - 1), 10000)
         query_header = {"index": self.INDEX_NAME}
 
         for chunk in [querywordss[x:x + chunk_size] for x in range(0, len(querywordss), chunk_size)]:

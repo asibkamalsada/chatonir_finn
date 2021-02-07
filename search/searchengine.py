@@ -93,21 +93,26 @@ class Searchengine:
         finally:
             return is_created
 
-    def chunk_iterate_docs(self, page_size=10000):
+    def chunk_iterate_docs(self, page_size=10000, keep_alive="12h"):
         if page_size > 10000:
             page_size = 10000
+        pit: dict = self.es_client.open_point_in_time(index=self.INDEX_NAME, keep_alive=keep_alive)
 
         query = {
             "size": page_size,
-            "sort": [{"_doc": "asc"}]
+            "sort": [{"_doc": "asc"}],
+            "pit": pit
         }
 
-        response = self.es_client.search(body=query, index=self.INDEX_NAME)
+        response = self.es_client.search(body=query)
 
         while response["hits"]["hits"]:
             yield response["hits"]["hits"]
             query["search_after"] = response["hits"]["hits"][-1]["sort"]
-            response = self.es_client.search(body=query, index=self.INDEX_NAME)
+            query["pit"]["id"] = response["pit_id"]
+            response = self.es_client.search(body=query)
+
+        self.es_client.close_point_in_time(body={"id": response["pit_id"]})
 
     def index_data(self, data, batch_size=10000):
         """ Indexs all the rows in data"""
@@ -236,11 +241,12 @@ class Searchengine:
             return {" ".join(kws): score for (kws, score) in k.single_kq(entry["_id"], keywordss[entry["_id"]])}
 
         for entries in self.chunk_iterate_docs(page_size=chunk_size):
+            old_size = len(entries)
             entries = [entry for entry in entries if entry["_source"].get("keyqueries", -1) == -1]
             print(len(entries))
             if entries:
                 print(entries[0])
-                print(f"did not read chunk of {chunk_size}")
+                print(f"did not read {len(entries)} out of {old_size} possible docs in chunk")
                 keywordss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
                 try:
                     self.chunk_update_field(((_id, {"keywords": keywords}) for (_id, keywords) in keywordss.items()),
@@ -254,7 +260,7 @@ class Searchengine:
                     print(ElasticsearchException)
                     print("exception occured")
             else:
-                print(f"already read chunk of {chunk_size}")
+                print(f"already read chunk of {old_size}")
 
     def chunk_update_field(self, gen, chunk_size=1000, page_size=None):
         """
