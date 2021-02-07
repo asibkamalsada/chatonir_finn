@@ -2,6 +2,7 @@ import itertools
 from collections import Counter, Iterable
 from statistics import mean
 from typing import Any, Dict, Set
+import math
 
 import PyPDF2
 from io import StringIO
@@ -182,6 +183,10 @@ class Searchengine:
         }
         return self.es_client.search(index=self.INDEX_NAME, body=search)
 
+
+    def id_search(self, id, size=10000):
+        return self.es_client.get(index=self.INDEX_NAME, id=id)
+
     def start(self):
         papers = []
         while True:
@@ -300,21 +305,18 @@ class Searchengine:
                 json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
 
     def select_keyquerie(self, papers):
-        alldic = []
-        for paper in papers:
-            alldic.append(paper["_source"].get("keyqueries"))
+        alldic = [paper["_source"].get("keyqueries") for paper in papers]
         allkeys = []
         for dic in alldic:
             for key in dic:
                 allkeys.append(key)
-        u = [dics.keys() | set() for dics in alldic]
-        # print(u)
-        test = set.intersection(*u)
-        # print(test)
+
         revindex = Counter(allkeys)
-        # option 1
+
         candidates = [k for k, v in revindex.items() if float(v) >= len(papers)]
+        selected = ""
         if candidates:
+            print("\n---------------------- Option 1 ------------------------")
             score = 0
             for temp in candidates:
                 aver = 0
@@ -323,14 +325,36 @@ class Searchengine:
                 maybe = aver / len(papers)
                 if maybe > score:
                     score = maybe
+                    selected = temp
                 else:
                     candidates.remove(temp)
-            return "Option 1: " + str(candidates)
+            return selected
 
-        # option 2
-        print("")
-        print("OPTION 2 (is a dummy return)-------------------------")
-        print(revindex.most_common(1)[0][0])
+        print("\n---------------------- Option 2 ------------------------")
+        solutions = self.select_keyqueries(papers)
+        keywords = []
+        max_keywords = list(frozenset.union(*solutions.keys()))
+        ids = list(set.union(*solutions.values()))
+        k = keyqueries.Keyqueries()
+        keyout = []
+
+        if len(max_keywords) < 10:
+            output = k.best_kq(_ids=ids, keywords=max_keywords)
+            return output
+
+        max_anz = sum(len(v) for v in solutions.values())
+        for solution in solutions.keys():
+            x = math.floor((len(solutions[solution])/max_anz) * 9)
+            for id in solutions[solution]:
+                keywords.append(self.id_search(id)["_source"].get("keywords"))
+            sorted_merge = {k: v for k, v in sorted({k: v for d in keywords for k, v in d.items()}.items(), key=lambda item: item[1], reverse=True)}
+            keyout.append(list(sorted_merge.keys())[:x])
+            keywords.clear()
+        output = k.best_kq(_ids=ids, keywords=[j for i in keyout for j in i])
+        return output
+
+
+        '''
         if revindex.most_common(1)[0][1] > 1:
             candidates = [k for k, v in revindex.items() if float(v) == revindex.most_common(1)[0][1]]
             unoccourrentpaper = {}
@@ -359,6 +383,7 @@ class Searchengine:
                     return revindex.most_common(1)[0][0]
         else:
             return "Those paper are not compatible for the keyquerie search. Sorry."
+            '''
 
     def select_keyqueries(self, docs_p):
         docs = []
