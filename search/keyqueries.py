@@ -67,7 +67,7 @@ class Keyqueries:
                     yield qws, seed_scores
 
     def best_kq(self, _ids, keywords):
-        kqs = {sum(seed_scores.values()): (kq, seed_scores) for kq, seed_scores in self.multi_kq(_ids, keywords)}
+        kqs = {sum(seed_scores.values()): (kq, seed_scores) for kq, seed_scores in self.multi_kq(_ids=_ids, keywords=keywords)}
         return kqs[max(kqs)]
 
 

@@ -6,7 +6,7 @@ def evaluate(new_index=False):
     papers = []
     if new_index:
         se.create_index()
-        se.index_data(se.readJSON("testdata.json"))
+        se.index_data(se.readJSON("json/testdata.json"))
         #se.update_abstracts("abstracts.json")
         se.update_keyqueries()
         time.sleep(1)  # elasticsearch is too slow lol
@@ -23,18 +23,34 @@ def evaluate(new_index=False):
                    tuple(["Model-driven formative evaluation of exploratory search: A study under a sensemaking framework Share on", "Exploratory search: from finding to understanding"]): ["Model-driven formative evaluation of exploratory search: A study under a sensemaking framework", "Exploratory search: from finding to understanding"]}
 
     testcase = 0
+    counter = 0
+    miss = 0
+    perfect = 0
     for i in queryinputs:
         for j in i:
             response = se.title_search(j)
             papers.append(response["hits"]["hits"][0])
         kq = se.select_keyquerie(papers)
         score = 0
-        score_this = se.normal_search(kq[0], size=1000)
+        if isinstance(kq, tuple):
+            score_this = se.normal_search(" ".join(kq[0]), size=1000)
+        else:
+            score_this = se.normal_search(kq, size=1000)
         for x in queryinputs[tuple(i)]:
             for hit in score_this["hits"]["hits"]:
                 if hit["_source"]["title"] == x:
+                    counter += 1
                     score += hit["_score"]
                     break
         testcase += 1
+        if counter == 0:
+            miss += 1
+        if counter == len(queryinputs[tuple(i)]):
+            perfect += 1
         print("For testcase:"+str(testcase)+" -" + i[0] + ", [...]-  the score of found paper is: " + str(score))
-    #print(papers)
+        print(str(counter) + " out of " + str(len(queryinputs[tuple(i)])) + " was/where found.")
+        counter = 0
+
+        papers.clear()
+    print("\n""We did not find any paper in " + str(miss) + " out of " + str(len(queryinputs)) + " cases!")
+    print("\n""Every expected paper was found in " + str(perfect) + " out of " + str(len(queryinputs)) + " cases!")
