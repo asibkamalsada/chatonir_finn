@@ -1,5 +1,7 @@
 import searchengine
 import time
+from sklearn.metrics import ndcg_score, dcg_score
+import numpy as np
 
 def evaluate(new_index=False):
     se = searchengine.Searchengine()
@@ -26,22 +28,33 @@ def evaluate(new_index=False):
     counter = 0
     miss = 0
     perfect = 0
+    nDCG_scores = []
     for i in queryinputs:
+        true_rel = []
+        rel_score = []
         for j in i:
             response = se.title_search(j)
             papers.append(response["hits"]["hits"][0])
         kq = se.select_keyquerie(papers)
         score = 0
         if isinstance(kq, tuple):
-            score_this = se.normal_search(" ".join(kq[0]), size=1000)
+            score_this = se.normal_search(" ".join(kq[0]), size=10)
         else:
-            score_this = se.normal_search(kq, size=1000)
+            score_this = se.normal_search(kq, size=10)
         for x in queryinputs[tuple(i)]:
             for hit in score_this["hits"]["hits"]:
                 if hit["_source"]["title"] == x:
                     counter += 1
                     score += hit["_score"]
+                    rel_score.append(1)
                     break
+                rel_score.append(0)
+        true_rel = sorted(rel_score, reverse=True)
+        if counter == 0:
+            ndcg_score = 0
+        else:
+            ndcg_score = dcg_score(np.asarray([true_rel]), np.asarray([rel_score])) / dcg_score(np.asarray([true_rel]), np.asarray([true_rel]))
+        nDCG_scores.append(ndcg_score)
         testcase += 1
         if counter == 0:
             miss += 1
@@ -49,8 +62,10 @@ def evaluate(new_index=False):
             perfect += 1
         print("For testcase:"+str(testcase)+" -" + i[0] + ", [...]-  the score of found paper is: " + str(score))
         print(str(counter) + " out of " + str(len(queryinputs[tuple(i)])) + " was/where found.")
+        print("The nDCG@10 score for this search is " + str(ndcg_score) + ".")
         counter = 0
 
         papers.clear()
     print("\n""We did not find any paper in " + str(miss) + " out of " + str(len(queryinputs)) + " cases!")
     print("\n""Every expected paper was found in " + str(perfect) + " out of " + str(len(queryinputs)) + " cases!")
+    print("\nThe average nDCG@10 score is " + str(sum(nDCG_scores)/len(nDCG_scores)) + ".")
