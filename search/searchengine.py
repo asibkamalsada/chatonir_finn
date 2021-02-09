@@ -183,9 +183,8 @@ class Searchengine:
         }
         return self.es_client.search(index=self.INDEX_NAME, body=search)
 
-
-    def id_search(self, id, size=10000):
-        return self.es_client.get(index=self.INDEX_NAME, id=id)
+    def id_search(self, _id, size=10000):
+        return self.es_client.get(index=self.INDEX_NAME, id=_id)
 
     def start(self):
         papers = []
@@ -282,20 +281,34 @@ class Searchengine:
 
         if page_size:
             if page_size <= chunk_size:
-                bulk(self.es_client, gen_)
+                bulk(self.es_client, gen_, refresh="wait_for")
         else:
-            page_size = "unknown amount of"
+            # page_size = "unknown amount of"
             try:
                 while True:
                     actions = [next(gen_)]
-                    bulk(self.es_client, actions)
-                    bulk(self.es_client, itertools.islice(gen_, chunk_size))
+                    bulk(self.es_client, actions, refresh="wait_for")
+                    bulk(self.es_client, itertools.islice(gen_, chunk_size), refresh="wait_for")
             except StopIteration:
                 pass
-        print(f"{page_size} documents successfully read")
+        # print(f"{page_size} documents successfully read")
 
     def debug_print(self):
         print(sum(len(hits) for hits in self.chunk_iterate_docs()))
+
+    def extract_noise(self, size=5000):
+        query = {
+            "size": size,
+            "query": {
+                "function_score": {
+                    "query": {"match_all": {}},
+                    "random_score": {}
+                }
+            }
+        }
+        content = json.dumps([hit["_source"] for hit in self.es_client.search(body=query, index=self.INDEX_NAME)["hits"]["hits"]])
+        with open("json/noise.json", "w") as file:
+            file.write(content)
 
     def extract_json(self, search_phrase, file_name=None):
         if not file_name:
@@ -353,8 +366,7 @@ class Searchengine:
         output = k.best_kq(_ids=ids, keywords=[j for i in keyout for j in i])
         return output
 
-
-        '''
+    '''
         if revindex.most_common(1)[0][1] > 1:
             candidates = [k for k, v in revindex.items() if float(v) == revindex.most_common(1)[0][1]]
             unoccourrentpaper = {}
@@ -383,7 +395,7 @@ class Searchengine:
                     return revindex.most_common(1)[0][0]
         else:
             return "Those paper are not compatible for the keyquerie search. Sorry."
-            '''
+    '''
 
     def select_keyqueries(self, docs_p):
         docs = []

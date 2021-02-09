@@ -27,6 +27,7 @@ class Keyqueries:
 
     def single_kq(self, _id, keywords):
         for qws, seed_scores in self.multi_kq([_id], keywords):
+            # print(qws, seed_scores)
             yield qws, seed_scores[_id]
 
     def multi_kq(self, _ids, keywords):
@@ -36,8 +37,8 @@ class Keyqueries:
             keywords = [*keywords]
         querywordss = [tuple(keywords[index] for index in range(0, len(keywords)) if 1 << index & bitcode) for bitcode
                        in range(0, 2 ** len(keywords))]
-        # this actually means chunk_size = half of amount of possible keyqueries or 10000
-        chunk_size = min(2 ** (len(keywords) - 1), 10000)
+        # this actually means chunk_size = amount of possible keyqueries or 10000
+        chunk_size = min(2 ** len(keywords), 10000)
         query_header = {"index": self.INDEX_NAME}
 
         for chunk in [querywordss[x:x + chunk_size] for x in range(0, len(querywordss), chunk_size)]:
