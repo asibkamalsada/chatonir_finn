@@ -1,14 +1,17 @@
 import itertools
-from collections import Counter, Iterable
-from statistics import mean
-from typing import Any, Dict, Set
+import json
 import math
+import multiprocessing
+from collections import Counter
+from concurrent.futures.thread import ThreadPoolExecutor
+from io import StringIO
+from math import ceil
+from statistics import mean
+from threading import Thread
 
 import PyPDF2
-from io import StringIO
 from elasticsearch import Elasticsearch, ElasticsearchException
 from elasticsearch.helpers import bulk
-import json
 
 import keyqueries
 
@@ -16,6 +19,26 @@ import keyqueries
 def print_return(param):
     # print(param)
     return param
+
+
+def calc_kwss_kqss(entries):
+    k = keyqueries.Keyqueries()
+    old_size = len(entries)
+    entries = [entry for entry in entries if entry["_source"].get("keyqueries", -1) == -1]
+    if entries:
+        print(f"first entry: {entries[0]}\ndid not read {len(entries)} out of {old_size} possible docs in chunk... ")
+        kwss = dict()
+        kqss = dict()
+        for entry in entries:
+            kws = k.extract_keywords(entry)
+            kqs = {" ".join(qws): score for (qws, score) in k.single_kq(entry["_id"], kws)}
+            kwss[entry["_id"]] = kws
+            kqss[entry["_id"]] = kqs
+        return kwss, kqss
+        # kwss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
+        # kqss = {entry["_id"]: create_kq_dict(entry) for entry in entries}
+    else:
+        print(f"already read chunk of {old_size}")
 
 
 class Searchengine:
@@ -238,33 +261,44 @@ class Searchengine:
         self.chunk_update_field(gen)
 
     def update_keyqueries(self):
-        chunk_size = 10000
-        k = keyqueries.Keyqueries()
+        self.es_client.indices.refresh(index=self.INDEX_NAME)
+        doc_count = self.es_client.indices.stats(index=self.INDEX_NAME, metric="docs")["indices"][self.INDEX_NAME]["total"]["docs"]["count"]
+        cpu_count = ceil(multiprocessing.cpu_count() * 2)
+        chunk_size = min(max(ceil(doc_count / cpu_count), 3), 1000)
+        # cpu_count = ceil(doc_count / chunk_size)
 
-        def create_kq_dict(entry):
-            return {" ".join(kws): score for (kws, score) in k.single_kq(entry["_id"], keywordss[entry["_id"]])}
+        # cpu_count = multiprocessing.cpu_count()
+        # chunk_size = 10000
 
-        for entries in self.chunk_iterate_docs(page_size=chunk_size):
-            old_size = len(entries)
-            entries = [entry for entry in entries if entry["_source"].get("keyqueries", -1) == -1]
-            print(len(entries))
-            if entries:
-                print(entries[0])
-                print(f"did not read {len(entries)} out of {old_size} possible docs in chunk")
-                keywordss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
+        threads = []
+
+        with ThreadPoolExecutor(max_workers=cpu_count) as executor:
+            for kwss, kqss in executor.map(calc_kwss_kqss, self.chunk_iterate_docs(page_size=chunk_size)):
                 try:
-                    self.chunk_update_field(((_id, {"keywords": keywords}) for (_id, keywords) in keywordss.items()),
-                                            page_size=len(entries))
+                    kws_t = Thread(target=self.chunk_update_field, args=(
+                        ((_id, {"keywords": kws}) for (_id, kws) in kwss.items()),
+                    ), kwargs={"page_size": len(kwss)})
+                    kws_t.start()
+                    threads.append(kws_t)
+                    # self.chunk_update_field(((_id, {"keywords": kws}) for (_id, kws) in kwss.items()),
+                    #                         page_size=len(kwss))
                     # every "_id" has a field called "keyqueries" which contains a dict consisting of a space separated
                     # concatenation of the keywords of the keyquery and the score of the respective "_id" regarding
                     # this particular keyquery
-                    self.chunk_update_field(((entry["_id"], {"keyqueries": create_kq_dict(entry)}) for entry in entries),
-                                            page_size=len(entries))
+                    kqs_t = Thread(target=self.chunk_update_field, args=(
+                        ((_id, {"keyqueries": kqs}) for (_id, kqs) in kqss.items()),
+                    ), kwargs={"page_size": len(kqss)})
+                    kqs_t.start()
+                    threads.append(kqs_t)
+                    # self.chunk_update_field(((_id, {"keyqueries": kqs}) for (_id, kqs) in kqss.items()),
+                    #                         page_size=len(kqss))
+                    print(f"done {len(kqss)}")
                 except ElasticsearchException:
                     print(ElasticsearchException)
                     print("exception occured")
-            else:
-                print(f"already read chunk of {old_size}")
+
+        for t in threads:
+            t.join()
 
     def chunk_update_field(self, gen, chunk_size=1000, page_size=None):
         """
@@ -279,11 +313,9 @@ class Searchengine:
                  "_id": _id,
                  "doc": print_return(fields)} for (_id, fields) in itertools.islice(gen, chunk_size))
 
-        if page_size:
-            if page_size <= chunk_size:
-                bulk(self.es_client, gen_, refresh="wait_for")
+        if page_size and page_size <= chunk_size:
+            bulk(self.es_client, gen_, refresh="wait_for")
         else:
-            # page_size = "unknown amount of"
             try:
                 while True:
                     actions = [next(gen_)]
