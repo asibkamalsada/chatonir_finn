@@ -244,9 +244,8 @@ class Searchengine:
             ask = input("Do you want to add another paper [Y/n]?")
             if ask == 'n':
                 break
-
-        print(self.select_keyqueries(papers))
-        # print(self.select_keyquerie(papers))
+        if papers:
+            print(self.select_keyquerie(papers))
 
     def fill_documents(self, path):
         docs = self.readJSON(path)
@@ -263,42 +262,44 @@ class Searchengine:
     def update_keyqueries(self):
         self.es_client.indices.refresh(index=self.INDEX_NAME)
         doc_count = self.es_client.indices.stats(index=self.INDEX_NAME, metric="docs")["indices"][self.INDEX_NAME]["total"]["docs"]["count"]
-        cpu_count = ceil(multiprocessing.cpu_count() * 2)
-        chunk_size = min(max(ceil(doc_count / cpu_count), 3), 1000)
+        cpu_count = ceil(multiprocessing.cpu_count()*2)
+        chunk_size = min(max(ceil(doc_count / cpu_count), 1), 1000)
         # cpu_count = ceil(doc_count / chunk_size)
 
         # cpu_count = multiprocessing.cpu_count()
         # chunk_size = 10000
 
-        threads = []
+        exceptions = list()
 
         with ThreadPoolExecutor(max_workers=cpu_count) as executor:
             for kwss, kqss in executor.map(calc_kwss_kqss, self.chunk_iterate_docs(page_size=chunk_size)):
                 try:
-                    kws_t = Thread(target=self.chunk_update_field, args=(
+                    self.chunk_update_field(((_id, {"keywords": kws}) for (_id, kws) in kwss.items()), page_size=len(kwss))
+                    '''kws_t = Thread(target=self.chunk_update_field, args=(
                         ((_id, {"keywords": kws}) for (_id, kws) in kwss.items()),
                     ), kwargs={"page_size": len(kwss)})
                     kws_t.start()
-                    threads.append(kws_t)
+                    threads.append(kws_t)'''
                     # self.chunk_update_field(((_id, {"keywords": kws}) for (_id, kws) in kwss.items()),
                     #                         page_size=len(kwss))
                     # every "_id" has a field called "keyqueries" which contains a dict consisting of a space separated
                     # concatenation of the keywords of the keyquery and the score of the respective "_id" regarding
                     # this particular keyquery
-                    kqs_t = Thread(target=self.chunk_update_field, args=(
+                    self.chunk_update_field(((_id, {"keyqueries": kqs}) for (_id, kqs) in kqss.items()), page_size=len(kqss))
+                    '''kqs_t = Thread(target=self.chunk_update_field, args=(
                         ((_id, {"keyqueries": kqs}) for (_id, kqs) in kqss.items()),
                     ), kwargs={"page_size": len(kqss)})
                     kqs_t.start()
-                    threads.append(kqs_t)
+                    threads.append(kqs_t)'''
                     # self.chunk_update_field(((_id, {"keyqueries": kqs}) for (_id, kqs) in kqss.items()),
                     #                         page_size=len(kqss))
                     print(f"done {len(kqss)}")
                 except ElasticsearchException:
-                    print(ElasticsearchException)
+                    exceptions.append(ElasticsearchException)
                     print("exception occured")
 
-        for t in threads:
-            t.join()
+        with open("exceptions.txt", "w") as file:
+            file.writelines(str(e) for e in exceptions)
 
     def chunk_update_field(self, gen, chunk_size=1000, page_size=None):
         """
@@ -314,19 +315,20 @@ class Searchengine:
                  "doc": print_return(fields)} for (_id, fields) in itertools.islice(gen, chunk_size))
 
         if page_size and page_size <= chunk_size:
-            bulk(self.es_client, gen_, refresh="wait_for")
+            bulk(self.es_client, gen_)
         else:
             try:
                 while True:
                     actions = [next(gen_)]
-                    bulk(self.es_client, actions, refresh="wait_for")
-                    bulk(self.es_client, itertools.islice(gen_, chunk_size), refresh="wait_for")
+                    bulk(self.es_client, actions)
+                    bulk(self.es_client, itertools.islice(gen_, chunk_size))
             except StopIteration:
                 pass
-        # print(f"{page_size} documents successfully read")
+        print(f"{page_size} documents successfully read")
+        # self.es_client.indices.refresh(index=self.INDEX_NAME)
 
     def debug_print(self):
-        print(sum(len(hits) for hits in self.chunk_iterate_docs()))
+        print("hits with kq:", len(list(hit for hits in self.chunk_iterate_docs() for hit in hits if hit["_source"].get("keyqueries"))))
 
     def extract_noise(self, size=5000):
         query = {
@@ -350,7 +352,7 @@ class Searchengine:
                 json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
 
     def select_keyquerie(self, papers):
-        alldic = [paper["_source"].get("keyqueries") for paper in papers]
+        alldic = [paper["_source"].get("keyqueries") for paper in papers if paper["_source"].get("keyqueries")]
         allkeys = []
         for dic in alldic:
             for key in dic:
@@ -434,9 +436,12 @@ class Searchengine:
         for doc_p in docs_p:
             doc = dict()
             doc["_id"] = doc_p["_id"]
-            doc["keyqueries"] = {frozenset(kq_str.split()): score
-                                 for kq_str, score in doc_p["_source"]["keyqueries"].items()}
-            docs.append(doc)
+            try:
+                doc["keyqueries"] = {frozenset(kq_str.split()): score
+                                     for kq_str, score in doc_p["_source"]["keyqueries"].items()}
+                docs.append(doc)
+            except KeyError:
+                pass
 
         id_src = {doc["_id"]: doc["keyqueries"] for doc in docs}
 
