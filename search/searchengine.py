@@ -209,6 +209,34 @@ class Searchengine:
     def id_search(self, _id, size=10000):
         return self.es_client.get(index=self.INDEX_NAME, id=_id)
 
+    def normal_search_exclude_ids(self, query, ids, size=10000):
+        """ Searches the user query and finds the best matches using elasticsearch."""
+        if not isinstance(ids, list):
+            return None
+        search = {
+            "size": size,
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["title", "abstract", "fulltext"]
+                            },
+                        }
+                    ],
+                    "must_not": [
+                        {
+                            "ids": {
+                                "values": ids
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+        return self.es_client.search(index=self.INDEX_NAME, body=search)
+
     def start(self):
         papers = []
         while True:
@@ -245,6 +273,7 @@ class Searchengine:
             if ask == 'n':
                 break
         if papers:
+            print(papers)
             print(self.select_keyquerie(papers))
 
     def fill_documents(self, path):
