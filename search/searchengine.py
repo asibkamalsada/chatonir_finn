@@ -17,7 +17,6 @@ def print_return(param):
     # print(param)
     return param
 
-
 class Searchengine:
 
     def __init__(self):
@@ -186,6 +185,34 @@ class Searchengine:
     def id_search(self, _id, size=10000):
         return self.es_client.get(index=self.INDEX_NAME, id=_id)
 
+    def normal_search_exclude_ids(self, query, ids, size=10000):
+        """ Searches the user query and finds the best matches using elasticsearch."""
+        if not isinstance(ids, list):
+            return None
+        search = {
+            "size": size,
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["title", "abstract", "fulltext"]
+                            },
+                        }
+                    ],
+                    "must_not": [
+                        {
+                            "ids": {
+                                "values": ids
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+        return self.es_client.search(index=self.INDEX_NAME, body=search)
+
     def start(self):
         papers = []
         while True:
@@ -221,8 +248,8 @@ class Searchengine:
             ask = input("Do you want to add another paper [Y/n]?")
             if ask == 'n':
                 break
-
-        print(self.select_keyqueries(papers))
+        print(papers)
+        print(self.select_keyquerie(papers))
         # print(self.select_keyquerie(papers))
 
     def fill_documents(self, path):
@@ -261,7 +288,7 @@ class Searchengine:
                     self.chunk_update_field(((entry["_id"], {"keyqueries": create_kq_dict(entry)}) for entry in entries),
                                             page_size=len(entries))
                 except ElasticsearchException:
-                    print(ElasticsearchException)
+                    print(ElasticsearchException.with_traceback())
                     print("exception occured")
             else:
                 print(f"already read chunk of {old_size}")
@@ -279,9 +306,8 @@ class Searchengine:
                  "_id": _id,
                  "doc": print_return(fields)} for (_id, fields) in itertools.islice(gen, chunk_size))
 
-        if page_size:
-            if page_size <= chunk_size:
-                bulk(self.es_client, gen_, refresh="wait_for")
+        if page_size and page_size <= chunk_size:
+            bulk(self.es_client, gen_, refresh="wait_for")
         else:
             # page_size = "unknown amount of"
             try:
