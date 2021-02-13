@@ -1,0 +1,190 @@
+,topicid,title,ranking,acmId
+0,1,Improving selection of off-screen targets with hopping,2,1124818
+1,1,Visualizing Locations of Off-screen Objects on Mobile Devices: A Comparative Evaluation of Three Approaches,3,1152266
+2,1,Comparing Visualizations for Tracking Off-screen Moving Targets,3,1241014
+3,1,Melange: space folding for multi-focus interaction,1,1357263
+4,1,Usability Engineering for Mobile Maps,1,1378150
+5,1,Zooming Interfaces for Augmented Reality Browsers,0,1851629
+6,1,Evaluation of an Off-screen Visualization for Magic Lens and Dynamic Peephole Interfaces,2,1851632
+7,1,Visualization of Off-screen Objects in Mobile Augmented Reality,3,1851655
+8,1,Off-screen Visualization Techniques for Class Diagrams,1,1879236
+9,1,Characterizing User Performance with Assisted Direct Off-screen Pointing,1,2037445
+10,1,EdgeSplit: Facilitating the Selection of Off-screen Objects,3,2371588
+11,1,Dynamic Visualization of Large Numbers of Off-screen Objects on Mobile Devices: An Experimental Comparison of Wedge and Overview+Detail,3,2371590
+12,1,On the Effectiveness of Overview+Detail Visualization on Mobile Devices,0,2434670
+13,1,City Lights: Contextual Views in Minimal Space,3,766022
+14,1,ZoneZoom: Map Navigation for Smartphones with Recursive View Segmentation,1,989901
+15,2,Local Fisher discriminant analysis for supervised dimensionality reduction,2,1143958
+16,2,An Adaptive and Dynamic Dimensionality Reduction Method for High-dimensional Indexing,3,1229059
+17,2,Dimensionality Reduction of Multimodal Labeled Data by Local Fisher Discriminant Analysis,3,1248694
+18,2,Locality Condensation: A New Dimensionality Reduction Method for Image Retrieval,2,1459389
+19,2,Information Retrieval Perspective to Nonlinear Dimensionality Reduction for Data Visualization,1,1756019
+20,2,Multilabel Dimensionality Reduction via Dependence Maximization,2,1839495
+21,2,Dimensionality Reduction for Text Using Domain Knowledge,1,1944658
+22,2,Effective data co-reduction for multimedia similarity search,2,1989430
+23,2,A Unifying Probabilistic Perspective for Spectral Dimensionality Reduction: Insights and New Models,2,2343695
+24,2,The IGrid index: reversing the dimensionality curse for similarity indexing in high dimensional space,3,347116
+25,2,Dimensionality reduction and similarity computation by inner product approximations,3,354822
+26,2,Outlier detection for high dimensional data,3,375668
+27,2,Random projection in dimensionality reduction: applications to image and text data,2,502546
+28,2,Towards Effective and Interpretable Data Mining by Visual Interaction,0,507518
+29,2,The Convex Polyhedra Technique: An Index Structure for High-dimensional Space,2,563910
+30,3,A Scalable Topic-Based Open Source Search Engine,0,1026324
+31,3,Modeling online reviews with multi-grain topic models,0,1367513
+32,3,Efficient methods for topic model inference on streaming document collections,0,1557121
+33,3,Generating comparative summaries of contradictory opinions in text,3,1646004
+34,3,Not-so-latent Dirichlet Allocation: Collapsed Gibbs Sampling Using Human Judgments,0,1866716
+35,3,Pattern and Keyword Based Opinion Analysis from Opinionated Texts,1,1980158
+36,3,Detection of Web Users' Opinion from Multimodal Opinion Elements,1,1980438
+37,3,A Pilot Study of Opinion Summarization in Conversations,1,2002515
+38,3,A Hierarchical Model of Web Summaries,1,2002866
+39,3,Tracking trends: incorporating term volume into temporal topic models,0,2020485
+40,3,A time-dependent topic model for multiple text streams,0,2020551
+41,3,Mining Contrastive Opinions on Political Texts Using Cross-perspective Topic Model,3,2124306
+42,3,Probabilistic Topic Models,1,2133826
+43,3,Bayesian Checking for Topic Models,1,2145459
+44,3,TopicViz: Interactive Topic Exploration in Document Collections,0,2223772
+45,3,Mining contentions from discussions and debates,3,2339664
+46,3,A Unified Graph Model for Chinese Product Review Summarization Using Richer Information,1,2346678
+47,3,Comparative Document Summarization via Discriminative Sentence Selection,0,2362386
+48,3,Unsupervised Part-of-speech Tagging in Noisy and Esoteric Domains with a Syntactic-semantic Bayesian HMM,0,2389970
+49,3,Joint topic modeling for event summarization across news and social media streams,1,2398417
+50,4,A Path-based Relational RDF Database,2,1082233
+51,4,Scalable semantic web data management using vertical partitioning,2,1325900
+53,4,RDF-3X: A RISC-style Engine for RDF,3,1453927
+54,4,Column-store Support for RDF Data Management: Not All Swans Are White,3,1454227
+55,4,SW-Store: A Vertically Partitioned DBMS for Semantic Web Data Management,3,1527469
+57,4,Scalable join processing on very large RDF graphs,3,1559911
+58,4,"SPIDER: a system for scalable, parallel / distributed evaluation of large-scale RDF data",1,1646315
+59,4,The RDF-3X Engine for Scalable Management of RDF Data,3,1731354
+60,4,Relational Processing of RDF Queries: A Survey,2,1815953
+62,4,SPOVC: A Scalable RDF Store Using Horizontal Partitioning and Column Oriented DBMS,3,2237875
+63,4,Compression of RDF Dictionaries,3,2245343
+64,4,RDF Data Management in the Amazon Cloud,1,2320790
+65,4,Querying RDF Dictionaries in Compressed Space,3,2340422
+66,4,Rya: A Scalable RDF Triple Store for the Clouds,1,2347677
+67,4,G-SPARQL: a hybrid engine for querying large attributed graphs,3,2396806
+68,4,Scalable RDF Graph Querying Using Cloud Computing,1,2481568
+69,5,The analysis of closed hashing under limited randomness,1,100245
+70,5,Lower bounds for sorting with few random accesses to external memory,1,1065197
+71,5,Randomized computations on large data sets: tight lower bounds,1,1142387
+72,5,Distribution Sort with Randomized Cycling,1,1162352
+73,5,Linear probing with constant independence,1,1250839
+74,5,Lower Bounds for Processing Data with Few Random Accesses to External Memory,1,1516514
+75,5,The limits of buffering: a tight lower bound for dynamic membership in the external memory model,2,1806752
+76,5,Cache-oblivious hashing,3,1807124
+77,5,On the cell probe complexity of dynamic membership,1,1873613
+78,5,Indexability of 2D range search revisited: constant redundancy and weak indivisibility,1,2213577
+79,5,The Power of Simple Tabulation Hashing,1,2220361
+80,5,External memory algorithms,1,275501
+81,5,Blocking in Parallel Multisearch Problems (Extended Abstract),1,277676
+82,5,On two-dimensional indexability and optimal range search indexing,2,304010
+83,5,A multidimensional digital hashing scheme for files with composite keys,2,318918
+84,5,The Analysis of Hashing Techniques That Exhibit K-ary Clustering,1,322096
+85,5,File Organization: Implementation of a Method Guaranteeing Retrieval in One Access,3,358193
+86,5,External Hashing with Limited Internal Storage,3,42274
+87,5,File Organization Using Composite Perfect Hashing,3,63521
+88,5,Lower bounds for external memory dictionaries,1,644201
+89,5,Planar Point Location for Large Data Sets: To Seek or Not to Seek,1,944626
+90,6,A Comprehensive Comparison Study of Document Clustering for a Biomedical Digital Library MEDLINE,3,1141802
+91,6,Integration of semantic-based bipartite graph representation and mutual refinement strategy for biomedical literature clustering,3,1150505
+92,6,Integrating Biomedical Literature Clustering and Summarization Approaches Using Biomedical Ontology,2,1183545
+93,6,Efficient Summarization-aware Search for Online News Articles,3,1255187
+95,6,A Survey of Web Clustering Engines,3,1541884
+97,7,A Survey of Web Clustering Engines,1,1541884
+98,6,Constant interaction-time scatter/gather browsing of very large document collections,3,160706
+99,6,Efficient Approach for Incremental Vietnamese Document Clustering,3,1651599
+101,6,Comprehensible and Accurate Cluster Labels in Text Clustering,3,1931410
+103,7,Comprehensible and Accurate Cluster Labels in Text Clustering,2,1931410
+105,6,Optimized K-means Clustering with Intelligent Initial Centroid Selection for Web Search Using URL and Tag Contents,3,1988764
+106,6,"Exploring the cluster hypothesis, and cluster-based retrieval, over the web",3,2398678
+107,6,The cluster hypothesis revisited,3,253524
+108,6,Fast and effective text mining using linear-time document clustering,2,312186
+109,6,Document clustering using word clusters via the information bottleneck method,3,345578
+110,6,Document clustering with cluster refinement and model selection capabilities,3,564411
+111,6,Frequent term-based text clustering,3,775110
+112,6,A matrix density based algorithm to hierarchically co-cluster documents and words,3,775225
+113,6,A hierarchical monothetic document clustering algorithm for summarization and browsing search results,3,988762
+114,7,A Search Result Clustering Method Using Informatively Named Entities,2,1097063
+115,7,Automatically Labeling Hierarchical Clusters,2,1146650
+116,7,Automatically Labeling Hierarchical Clusters,2,1146650
+117,7,An experimental study on automatically labeling hierarchical clusters using statistical features,1,1148328
+118,7,Web Search Clustering and Labeling with Hidden Topics,3,1568295
+119,7,Clustering Technique in Multi-document Personal Name Disambiguation,1,1667897
+120,7,Analysis of structural relationships for hierarchical cluster labeling,1,1835481
+121,7,Learning Multiple Nonredundant Clusterings,0,1839496
+122,7,One Person Labels One Million Images,0,1874139
+123,7,Informative Polythetic Hierarchical Ephemeral Clustering,1,2052336
+124,7,Informative Polythetic Hierarchical Ephemeral Clustering,1,2052336
+125,7,A framework for personalized and collaborative clustering of search results,1,2063662
+126,7,Beyond precision@10: clustering the long tail of web search results,1,2063910
+127,7,Exploring the existing category hierarchy to automatically label the newly-arising topics in cQA,2,2398490
+128,7,Search result presentation based on faceted clustering,2,2398548
+129,7,Unsupervised Graph-based Topic Labelling Using Dbpedia,1,2433454
+130,7,THESUS: Organizing Web Document Collections Based on Link Semantics,2,953242
+131,7,THESUS: Organizing Web Document Collections Based on Link Semantics,2,953242
+132,8,A Multi-agent System That Facilitates Scientific Publications Search,2,1160680
+133,8,BIBEX: A Bibliographic Exploration Tool Based on the DEX Graph Query Engine,1,1353439
+134,8,Exploiting query reformulations for web search result diversification,1,1772780
+135,8,Interactive Information Seeking via Selective Application of Contextual Knowledge,1,1840806
+136,8,Automatically Building Research Reading Lists,3,1864740
+137,8,An adaptive ontology-based approach to identify correlation between publications,2,1963268
+138,8,Beyond keyword search: discovering relevant scientific literature,3,2020479
+139,8,Constructing seminal paper genealogy,2,2063900
+140,8,Metro maps of science,1,2339706
+141,8,Recommending Academic Papers via Users' Reading Purposes,3,2366004
+142,8,Systematic Literature Studies: Database Searches vs. Backward Snowballing,3,2372257
+143,8,Towards an effective and unbiased ranking of scientific literature through mutual reinforcement,3,2396853
+144,9,Clustering Versus Faceted Categories for Information Exploration,2,1121983
+145,11,Clustering Versus Faceted Categories for Information Exploration,3,1121983
+146,9,Evaluating Sources of Implicit Feedback in Web Searches,0,1297272
+147,9,Collaborative Multi-paradigm Exploratory Search,2,1379165
+148,11,Collaborative Multi-paradigm Exploratory Search,2,1379165
+149,9,What Do Exploratory Searchers Look at in a Faceted Search Interface?,1,1555452
+150,11,What Do Exploratory Searchers Look at in a Faceted Search Interface?,2,1555452
+151,9,"Tools-at-hand and learning in multi-session, collaborative search",1,1753468
+152,11,"Tools-at-hand and learning in multi-session, collaborative search",1,1753468
+153,9,Presenting Query Aspects to Support Exploratory Search,2,1862286
+154,11,Presenting Query Aspects to Support Exploratory Search,2,1862286
+155,9,Semantically Enabled Exploratory Video Search,1,1863887
+156,9,Search-logger Analyzing Exploratory Search Tasks,2,1982350
+157,11,Search-logger Analyzing Exploratory Search Tasks,3,1982350
+158,9,'Natural' Search User Interfaces,0,2018414
+159,11,'Natural' Search User Interfaces,0,2018414
+160,9,RerankEverything: a reranking interface for exploring search results,0,2063853
+161,9,Search or Explore: Do You Know What You'Re Looking for?,1,2071576
+162,10,Unsupervised query segmentation using generative language models and wikipedia,3,1367545
+163,10,Keyword Query Cleaning,0,1453955
+164,10,Query Segmentation Using Conditional Random Fields,3,1557680
+165,12,Query Segmentation Using Conditional Random Fields,3,1557680
+166,10,Two-stage query segmentation for information retrieval,3,1572140
+167,10,The power of naive query segmentation,3,1835621
+168,12,The power of naive query segmentation,3,1835621
+169,10,Unsupervised query segmentation using only query logs,3,1963239
+170,12,Unsupervised query segmentation using only query logs,3,1963239
+171,10,Query segmentation revisited,3,1963423
+172,12,Query segmentation revisited,3,1963423
+173,10,Joint Annotation of Search Queries,3,2002486
+174,10,Unsupervised query segmentation using clickthrough for information retrieval,3,2009957
+175,12,Unsupervised query segmentation using clickthrough for information retrieval,3,2009957
+176,10,Query suggestions in the absence of query logs,0,2010023
+177,10,Mining query structure from click data: a case study of product queries,1,2063930
+178,12,Mining query structure from click data: a case study of product queries,3,2063930
+179,10,Random Selection Assisted Long Web Search Query Optimization,0,2184555
+180,12,Random Selection Assisted Long Web Search Query Optimization,1,2184555
+181,10,Mining for insights in the search engine query stream,0,2188091
+182,10,An IR-based evaluation framework for web search query segmentation,3,2348401
+183,10,Detecting candidate named entities in search queries,2,2348463
+184,11,What you see is what you search: adaptive visual search framework for the web,1,1772798
+185,12,A unified and discriminative model for query refinement,3,1390400
+186,12,"Document language models, query models, and risk minimization for information retrieval",1,383970
+187,12,Effective Query Formulation with Multiple Information Sources,1,2124349
+188,12,Exploring web scale language models for search query processing,3,1772737
+189,12,Generating query substitutions,2,1135835
+190,12,Modeling reformulation using passage analysis,1,1871656
+191,12,Probabilistic query expansion using query logs,1,511489
+192,12,Query Suggestion by Constructing Term-transition Graphs,1,2124339
+193,12,The query-flow graph: model and applications,1,1458163
+194,13,Cluster-based retrieval using language models,1,1009026
+195,13,The ESA retrieval model revisited,0,1572070
+196,14,Effective Level of Term Frequency Impact on Large-scale Retrieval Performance: By Top-term Ranking Method,1,1146884
