@@ -186,13 +186,13 @@ def oldtest(queryinputs, se):
 
 def start(**kwargs):
     ev_json = evaluate(**kwargs)
-    with open("evaluation/b_" + "_".join(str(v) for k, v in standard_param.items() if k != "new_index"), "w") as fp:
+    with open("evaluation/a_" + "_".join(str(v) for k, v in standard_param.items() if k != "new_index"), "w") as fp:
         json.dump(obj=ev_json, fp=fp)
     print(str(ev_json))
 
 
 if __name__ == '__main__':
-    standard_param = {"new_index": False, "num_keywords": 9, "title_boost": 1, "min_rank": 50, "final_kws": 9}
+    standard_param = {"new_index": True, "num_keywords": 9, "title_boost": 1, "min_rank": 50, "final_kws": 9}
     start(**standard_param)
     standard_param["final_kws"] = 13
     standard_param["new_index"] = False

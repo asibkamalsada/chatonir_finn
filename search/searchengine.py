@@ -421,22 +421,17 @@ class Searchengine:
             max_keywords = frozenset.union(*solutions.keys())
             ids = set.union(*solutions.values())
             k = keyqueries.Keyqueries()
+            keyout = []
 
             if len(max_keywords) <= final_kws:
-                return k.best_kq(_ids=ids, keywords=list(max_keywords))
+                output = k.best_kq(_ids=ids, keywords=list(max_keywords))
+                return output
 
-            cut = frozenset.intersection(*solutions.keys())
-
-            if len(cut) >= final_kws:
-                return k.best_kq(_ids=ids, keywords=list(cut))
-
-            max_anz = len(max_keywords) - len(cut)
-            keyout = list(cut)
+            max_anz = sum(len(v) for v in solutions.values())
             for solution, _ids in solutions.items():
-                keywords = dict()
-                keywords.update(*(self.id_search(_id)["_source"].get("keywords") for _id in _ids))
-                sorted_merge = dict(sorted(((k, v) for k, v in keywords.items() if k not in keyout), key=lambda item: item[1], reverse=True))
-                allowed_n = math.ceil((len(_ids)/max_anz) * (final_kws - len(cut)))
+                keywords = dict(*(self.id_search(_id)["_source"].get("keywords") for _id in _ids))
+                sorted_merge = dict(sorted(keywords.items(), key=lambda item: item[1], reverse=True))
+                allowed_n = math.ceil((len(_ids) / max_anz) * final_kws)
                 keyout.extend(list(sorted_merge.keys())[:allowed_n])
             output = k.best_kq(_ids=ids, keywords=keyout)
             return output
