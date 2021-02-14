@@ -28,15 +28,13 @@ def calc_kwss_kqss(entries, num_keywords=9, min_rank=50, title_boost=2):
     entries = [entry for entry in entries if entry["_source"].get("keyqueries", -1) == -1]
     if entries:
         print(f"first entry: {entries[0]}\ndid not read {len(entries)} out of {old_size} possible docs in chunk... ")
-        kwss = dict()
-        kqss = dict()
+        kwqss = dict()
         for entry in entries:
             kws = k.extract_keywords(entry, num_keywords=num_keywords)
             kqs = {" ".join(qws): score
                    for (qws, score) in k.single_kq(entry["_id"], kws, min_rank=min_rank, title_boost=title_boost)}
-            kwss[entry["_id"]] = kws
-            kqss[entry["_id"]] = kqs
-        return kwss, kqss
+            kwqss[entry["_id"]] = (kws, kqs)
+        return kwqss
         # kwss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
         # kqss = {entry["_id"]: create_kq_dict(entry) for entry in entries}
     else:
@@ -304,41 +302,50 @@ class Searchengine:
         # cpu_count = multiprocessing.cpu_count()
         # chunk_size = 10000
 
+        unhandled = "json/unhandled.json"
+
         exceptions = list()
-
+        with open(unhandled, "w+") as fc:
+            fc.write("{")
         with ThreadPoolExecutor(max_workers=cpu_count) as executor:
-            for kwss, kqss in ((r[0], r[1]) for r in executor.map(calc_kwss_kqss,
-                                                                  self.chunk_iterate_docs(page_size=chunk_size),
-                                                                  (n for n in infinite(num_keywords)),
-                                                                  (t for t in infinite(title_boost)),
-                                                                  (m for m in infinite(min_rank))) if r):
-                try:
-                    self.chunk_update_field(((_id, {"keywords": kws}) for (_id, kws) in kwss.items()), page_size=len(kwss))
-                    '''kws_t = Thread(target=self.chunk_update_field, args=(
-                        ((_id, {"keywords": kws}) for (_id, kws) in kwss.items()),
-                    ), kwargs={"page_size": len(kwss)})
-                    kws_t.start()
-                    threads.append(kws_t)'''
-                    # self.chunk_update_field(((_id, {"keywords": kws}) for (_id, kws) in kwss.items()),
-                    #                         page_size=len(kwss))
-                    # every "_id" has a field called "keyqueries" which contains a dict consisting of a space separated
-                    # concatenation of the keywords of the keyquery and the score of the respective "_id" regarding
-                    # this particular keyquery
-                    self.chunk_update_field(((_id, {"keyqueries": kqs}) for (_id, kqs) in kqss.items()), page_size=len(kqss))
-                    '''kqs_t = Thread(target=self.chunk_update_field, args=(
-                        ((_id, {"keyqueries": kqs}) for (_id, kqs) in kqss.items()),
-                    ), kwargs={"page_size": len(kqss)})
-                    kqs_t.start()
-                    threads.append(kqs_t)'''
-                    # self.chunk_update_field(((_id, {"keyqueries": kqs}) for (_id, kqs) in kqss.items()),
-                    #                         page_size=len(kqss))
-                    print(f"done {len(kqss)}")
-                except ElasticsearchException:
-                    exceptions.append(ElasticsearchException)
-                    print("exception occured")
+            for kwqss in executor.map(calc_kwss_kqss,
+                                      self.chunk_iterate_docs(page_size=chunk_size),
+                                      (n for n in infinite(num_keywords)),
+                                      (t for t in infinite(title_boost)),
+                                      (m for m in infinite(min_rank))):
+                if not kwqss:
+                    continue
+                try_n = 1
+                while try_n < 5:
+                    try:
+                        self.chunk_update_field(((_id, {"keywords": kws, "keyqueries": kqs})
+                                                 for (_id, (kws, kqs)) in kwqss.items()),
+                                                page_size=len(kwqss))
+                        # every "_id" has a field called "keyqueries" which contains a dict consisting of a space
+                        # separated concatenation of the keywords of the keyquery and the score of the respective "_id"
+                        # regarding this particular keyquery
+                        print(f"done {len(kwqss)}")
+                        # break
+                    except ElasticsearchException as e:
+                        exceptions.append(e)
+                        print(f"exception occured on try {try_n}")
+                    finally:
+                        try_n += 1
+                else:
+                    with open(unhandled, "a") as fjson:
+                        for (_id, (kws, kqs)) in kwqss.items():
+                            fjson.write(f'"{_id}": ')
+                            fjson.write(json.dumps((kws, kqs)) + ',')
+            with open(unhandled, "r") as fr:
+                content = fr.read()
+                if content != '{':
+                    content = content[:-1]
+                content += '}'
+            with open(unhandled, "w") as fa:
+                fa.write(content)
 
-        with open("exceptions.txt", "w") as file:
-            file.writelines(str(e) for e in exceptions)
+        with open("exceptions.txt", "w") as fexc:
+            fexc.writelines(str(e) for e in exceptions)
 
     def chunk_update_field(self, gen, chunk_size=1000, page_size=None):
         """
@@ -367,7 +374,7 @@ class Searchengine:
         # self.es_client.indices.refresh(index=self.INDEX_NAME)
 
     def debug_print(self):
-        print("hits with kq:", len(list(hit for hits in self.chunk_iterate_docs() for hit in hits if hit["_source"].get("keyqueries"))))
+        print("hits without kq:", len(list(hit for hits in self.chunk_iterate_docs() for hit in hits if not hit["_source"].get("keyqueries"))))
 
     def extract_noise(self, size=5000):
         query = {
@@ -393,7 +400,7 @@ class Searchengine:
     def select_keyquerie(self, papers, final_kws=9):
         kqss_v = [paper["_source"].get("keyqueries") for paper in papers if paper["_source"].get("keyqueries")]
         kqss = [kqs for kqs_v in kqss_v for kqs in kqs_v]
-        ids = {paper["_source"]["_id"] for paper in papers}
+        ids = {paper["_id"] for paper in papers}
 
         revindex = Counter(kqss)
 
@@ -444,7 +451,7 @@ class Searchengine:
                 top_kwss.update(kqs_v_srtd[0][0])
         with ThreadPoolExecutor(max_workers=1) as pool:
             try:
-                return next(pool.map(k.best_kq, (ids,), (top_kwss,), timeout=120), default=None)
+                return next(pool.map(k.best_kq, (ids,), (top_kwss,), timeout=120), None)
             except TimeoutError:
                 pass
 
