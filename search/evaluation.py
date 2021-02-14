@@ -186,7 +186,7 @@ def oldtest(queryinputs, se):
 
 def start(**kwargs):
     ev_json = evaluate(**kwargs)
-    with open("evaluation/a_" + "_".join(str(v) for k, v in standard_param.items() if k != "new_index"), "w") as fp:
+    with open("evaluation/c_" + "_".join(str(v) for k, v in standard_param.items() if k != "new_index"), "w") as fp:
         json.dump(obj=ev_json, fp=fp)
     print(str(ev_json))
 

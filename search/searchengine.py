@@ -2,6 +2,7 @@ import itertools
 import json
 import math
 import multiprocessing
+import threading
 from collections import Counter
 from concurrent.futures.thread import ThreadPoolExecutor
 from io import StringIO
@@ -390,13 +391,11 @@ class Searchengine:
                 json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
 
     def select_keyquerie(self, papers, final_kws=9):
-        alldic = [paper["_source"].get("keyqueries") for paper in papers if paper["_source"].get("keyqueries")]
-        allkeys = []
-        for dic in alldic:
-            for key in dic:
-                allkeys.append(key)
+        kqss_v = [paper["_source"].get("keyqueries") for paper in papers if paper["_source"].get("keyqueries")]
+        kqss = [kqs for kqs_v in kqss_v for kqs in kqs_v]
+        ids = {paper["_source"]["_id"] for paper in papers}
 
-        revindex = Counter(allkeys)
+        revindex = Counter(kqss)
 
         candidates = [k for k, v in revindex.items() if float(v) >= len(papers)]
         selected = ""
@@ -405,7 +404,7 @@ class Searchengine:
             score = 0
             for temp in candidates:
                 aver = 0
-                for number in alldic:
+                for number in kqss_v:
                     aver += number[temp]
                 maybe = aver / len(papers)
                 if maybe > score:
@@ -415,11 +414,10 @@ class Searchengine:
                     candidates.remove(temp)
             return selected
 
-        print("\n---------------------- Option 2 ------------------------")
-        solutions = self.select_keyqueries(papers)
+        solutions = self.option2(papers)
         if solutions:
+            print("\n---------------------- Option 2 ------------------------")
             max_keywords = frozenset.union(*solutions.keys())
-            ids = set.union(*solutions.values())
             k = keyqueries.Keyqueries()
             keyout = []
 
@@ -435,6 +433,20 @@ class Searchengine:
                 keyout.extend(list(sorted_merge.keys())[:allowed_n])
             output = k.best_kq(_ids=ids, keywords=keyout)
             return output
+
+        print("\n---------------------- Option 3 ------------------------")
+        k = keyqueries.Keyqueries()
+        top_kwss = set()
+        for hit in papers:
+            kqs_v = hit["_source"].get("keyqueries")
+            if kqs_v:
+                kqs_v_srtd = sorted(kqs_v.items(), key=lambda item: item[1], reverse=True)
+                top_kwss.update(kqs_v_srtd[0][0])
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            try:
+                return next(pool.map(k.best_kq, (ids,), (top_kwss,), timeout=120), default=None)
+            except TimeoutError:
+                pass
 
     '''
         if revindex.most_common(1)[0][1] > 1:
@@ -467,7 +479,7 @@ class Searchengine:
             return "Those paper are not compatible for the keyquerie search. Sorry."
     '''
 
-    def select_keyqueries(self, docs_p):
+    def option2(self, docs_p):
         docs = []
         for doc_p in docs_p:
             doc = dict()
