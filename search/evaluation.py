@@ -87,7 +87,6 @@ def newtest(newinputs, se, **kwargs):
                     counter += 1
                     score += hit["_score"]
                     lel = df[df['title'] == row]['ranking'].head(1)
-                    print(lel)
                     if int(lel) > 0:
                         goodhitcounter += 1
                     rel_score.append(int(lel))
