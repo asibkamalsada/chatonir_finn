@@ -15,7 +15,7 @@ def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_
         se.index_data(se.readJSON("json/testdata.json"))
         se.index_data(se.readJSON('json/noise.json'))
         # se.fill_documents('json/fulltexts.json')
-        se.update_keyqueries(num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank)
+    se.update_keyqueries(num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank)
     se.es_client.indices.refresh(se.INDEX_NAME)
 
     queryinputs = {tuple(["Halo: a technique for visualizing off-screen objects", "Wedge: clutter-free visualization of off-screen locations"]) : ["Visualizing references to off-screen content on mobile devices: A comparison of Arrows, Wedge, and Overview+Detail","Visualizing locations of off-screen objects on mobile devices: a comparative evaluation of three approaches"],
@@ -87,7 +87,6 @@ def newtest(newinputs, se, **kwargs):
                     counter += 1
                     score += hit["_score"]
                     lel = df[df['title'] == row]['ranking'].head(1)
-                    print(lel)
                     if int(lel) > 0:
                         goodhitcounter += 1
                     rel_score.append(int(lel))
@@ -192,20 +191,20 @@ def start(**kwargs):
 
 
 if __name__ == '__main__':
-    standard_param = {"new_index": True, "num_keywords": 9, "title_boost": 1, "min_rank": 50, "final_kws": 9}
-    start(**standard_param)
-    standard_param["final_kws"] = 13
-    standard_param["new_index"] = False
-    start(**standard_param)
-    standard_param["final_kws"] = 9
-    standard_param["new_index"] = True
-    standard_param["title_boost"] = 2
-    start(**standard_param)
-    standard_param["title_boost"] = 1
-    standard_param["min_rank"] = 20
-    start(**standard_param)
-    standard_param["min_rank"] = 100
-    start(**standard_param)
-    standard_param["min_rank"] = 50
+    standard_param = {"new_index": False, "num_keywords": 9, "title_boost": 1, "min_rank": 50, "final_kws": 9}
+    # start(**standard_param)
+    # standard_param["final_kws"] = 13
+    # standard_param["new_index"] = False
+    # start(**standard_param)
+    # standard_param["final_kws"] = 9
+    # standard_param["new_index"] = True
+    # standard_param["title_boost"] = 2
+    # start(**standard_param)
+    # standard_param["title_boost"] = 1
+    # standard_param["min_rank"] = 20
+    # start(**standard_param)
+    # standard_param["min_rank"] = 100
+    # start(**standard_param)
+    # standard_param["min_rank"] = 50
     standard_param["num_keywords"] = 11
     start(**standard_param)
