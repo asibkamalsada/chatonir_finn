@@ -21,7 +21,7 @@ def print_return(param):
     return param
 
 
-def calc_kwss_kqss(entries):
+def calc_kwss_kqss(entries, num_keywords=9, min_rank=50, title_boost=2):
     k = keyqueries.Keyqueries()
     old_size = len(entries)
     entries = [entry for entry in entries if entry["_source"].get("keyqueries", -1) == -1]
@@ -30,8 +30,9 @@ def calc_kwss_kqss(entries):
         kwss = dict()
         kqss = dict()
         for entry in entries:
-            kws = k.extract_keywords(entry)
-            kqs = {" ".join(qws): score for (qws, score) in k.single_kq(entry["_id"], kws)}
+            kws = k.extract_keywords(entry, num_keywords=num_keywords)
+            kqs = {" ".join(qws): score
+                   for (qws, score) in k.single_kq(entry["_id"], kws, min_rank=min_rank, title_boost=title_boost)}
             kwss[entry["_id"]] = kws
             kqss[entry["_id"]] = kqs
         return kwss, kqss
@@ -41,11 +42,15 @@ def calc_kwss_kqss(entries):
         print(f"already read chunk of {old_size}")
 
 
+def infinite(value):
+    while True:
+        yield value
+
+
 class Searchengine:
 
     def __init__(self):
         self.INDEX_NAME = "paper"
-        self.SEARCH_SIZE = 10
         self.es_client = Elasticsearch()
 
     def readPDF(self, path):
@@ -288,7 +293,7 @@ class Searchengine:
 
         self.chunk_update_field(gen)
 
-    def update_keyqueries(self):
+    def update_keyqueries(self, num_keywords=9, title_boost=9, min_rank=50):
         self.es_client.indices.refresh(index=self.INDEX_NAME)
         doc_count = self.es_client.indices.stats(index=self.INDEX_NAME, metric="docs")["indices"][self.INDEX_NAME]["total"]["docs"]["count"]
         cpu_count = ceil(multiprocessing.cpu_count()*2)
@@ -301,7 +306,11 @@ class Searchengine:
         exceptions = list()
 
         with ThreadPoolExecutor(max_workers=cpu_count) as executor:
-            for kwss, kqss in executor.map(calc_kwss_kqss, self.chunk_iterate_docs(page_size=chunk_size)):
+            for kwss, kqss in ((r[0], r[1]) for r in executor.map(calc_kwss_kqss,
+                                                                  self.chunk_iterate_docs(page_size=chunk_size),
+                                                                  (n for n in infinite(num_keywords)),
+                                                                  (t for t in infinite(title_boost)),
+                                                                  (m for m in infinite(min_rank))) if r):
                 try:
                     self.chunk_update_field(((_id, {"keywords": kws}) for (_id, kws) in kwss.items()), page_size=len(kwss))
                     '''kws_t = Thread(target=self.chunk_update_field, args=(
@@ -380,7 +389,7 @@ class Searchengine:
             file.write(
                 json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
 
-    def select_keyquerie(self, papers):
+    def select_keyquerie(self, papers, final_kws=9):
         alldic = [paper["_source"].get("keyqueries") for paper in papers if paper["_source"].get("keyqueries")]
         allkeys = []
         for dic in alldic:
@@ -408,26 +417,29 @@ class Searchengine:
 
         print("\n---------------------- Option 2 ------------------------")
         solutions = self.select_keyqueries(papers)
-        keywords = []
-        max_keywords = list(frozenset.union(*solutions.keys()))
-        ids = list(set.union(*solutions.values()))
-        k = keyqueries.Keyqueries()
-        keyout = []
+        if solutions:
+            max_keywords = frozenset.union(*solutions.keys())
+            ids = set.union(*solutions.values())
+            k = keyqueries.Keyqueries()
 
-        if len(max_keywords) < 10:
-            output = k.best_kq(_ids=ids, keywords=max_keywords)
+            if len(max_keywords) <= final_kws:
+                return k.best_kq(_ids=ids, keywords=list(max_keywords))
+
+            cut = frozenset.intersection(*solutions.keys())
+
+            if len(cut) >= final_kws:
+                return k.best_kq(_ids=ids, keywords=list(cut))
+
+            max_anz = len(max_keywords) - len(cut)
+            keyout = list(cut)
+            for solution, _ids in solutions.items():
+                keywords = dict()
+                keywords.update(*(self.id_search(_id)["_source"].get("keywords") for _id in _ids))
+                sorted_merge = dict(sorted(((k, v) for k, v in keywords.items() if k not in keyout), key=lambda item: item[1], reverse=True))
+                allowed_n = math.ceil((len(_ids)/max_anz) * (final_kws - len(cut)))
+                keyout.extend(list(sorted_merge.keys())[:allowed_n])
+            output = k.best_kq(_ids=ids, keywords=keyout)
             return output
-
-        max_anz = sum(len(v) for v in solutions.values())
-        for solution in solutions.keys():
-            x = math.floor((len(solutions[solution])/max_anz) * 9)
-            for id in solutions[solution]:
-                keywords.append(self.id_search(id)["_source"].get("keywords"))
-            sorted_merge = {k: v for k, v in sorted({k: v for d in keywords for k, v in d.items()}.items(), key=lambda item: item[1], reverse=True)}
-            keyout.append(list(sorted_merge.keys())[:x])
-            keywords.clear()
-        output = k.best_kq(_ids=ids, keywords=[j for i in keyout for j in i])
-        return output
 
     '''
         if revindex.most_common(1)[0][1] > 1:

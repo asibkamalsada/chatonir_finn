@@ -11,26 +11,22 @@ class Keyqueries:
         self.es = Elasticsearch()
         self.extractor = textrank.TextRank4Keyword()
 
-        self.MAX_SEARCH = 10000
-        self.MIN_RANK = 50
-        self.TITLE_BOOST = 2
         self.INDEX_NAME = "paper"
-        self.MAX_DEPTH = sys.maxsize
 
-    def extract_keywords(self, seed):
+    def extract_keywords(self, seed, num_keywords=9):
         source = seed["_source"]
         self.extractor.analyze(f'{source.get("abstract", "")}\n{source.get("title", "")}\n{source.get("fulltext", "")}',
                                candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=True)
-        keywords_dict = self.extractor.get_keywords(9)
+        keywords_dict = self.extractor.get_keywords(num_keywords)
         # print(keywords_dict)
         return keywords_dict
 
-    def single_kq(self, _id, keywords):
-        for qws, seed_scores in self.multi_kq([_id], keywords):
+    def single_kq(self, _id, keywords, min_rank=50, title_boost=2):
+        for qws, seed_scores in self.multi_kq([_id], keywords, min_rank, title_boost):
             # print(qws, seed_scores)
             yield qws, seed_scores[_id]
 
-    def multi_kq(self, _ids, keywords):
+    def multi_kq(self, _ids, keywords, min_rank=50, title_boost=2):
         if not keywords:
             return
         if isinstance(keywords, dict):
@@ -45,11 +41,11 @@ class Keyqueries:
             query = []
             for qws in chunk:
                 query_body = {
-                    "size": self.MIN_RANK,
+                    "size": min_rank,
                     "query": {
                         "multi_match": {
                             "query": " ".join(qws),
-                            "fields": [f"title^{self.TITLE_BOOST}", "abstract", "fulltext"],
+                            "fields": [f"title^{title_boost}", "abstract", "fulltext"],
                             "operator": "and"
                         },
                     },

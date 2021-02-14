@@ -1,19 +1,22 @@
+import json
+
 import searchengine
 import time
 from sklearn.metrics import ndcg_score, dcg_score
 import numpy as np
 import pandas as pd
 
-def evaluate(new_index=False):
+
+def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_kws=9):
     se = searchengine.Searchengine()
     if new_index:
         se.create_index()
         se.index_data(se.readJSON("json/data.json"))
         se.index_data(se.readJSON("json/testdata.json"))
         se.index_data(se.readJSON('json/noise.json'))
-  #      se.fill_documents('json/fulltexts.json')
-        se.update_keyqueries()
-        time.sleep(1)  # elasticsearch is too slow lol
+        # se.fill_documents('json/fulltexts.json')
+        se.update_keyqueries(num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank)
+    se.es_client.indices.refresh(se.INDEX_NAME)
 
     queryinputs = {tuple(["Halo: a technique for visualizing off-screen objects", "Wedge: clutter-free visualization of off-screen locations"]) : ["Visualizing references to off-screen content on mobile devices: A comparison of Arrows, Wedge, and Overview+Detail","Visualizing locations of off-screen objects on mobile devices: a comparative evaluation of three approaches"],
                    tuple(["Towards optimum query segmentation: in doubt without", "Query segmentation based on eigenspace similarity", "Unsupervised query segmentation using click data: preliminary results"]): ["An IR-based evaluation framework for web search query segmentation","Query segmentation using conditional random fields."],
@@ -26,25 +29,25 @@ def evaluate(new_index=False):
                    tuple(["A source independent framework for research paper recommendation.", "SOFIA SEARCH: a tool for automating related-work search"]): ["Recommending citations: translating papers into references", "Context-aware citation recommendation"],
                    tuple(["Model-driven formative evaluation of exploratory search: A study under a sensemaking framework Share on", "Exploratory search: from finding to understanding"]): ["Model-driven formative evaluation of exploratory search: A study under a sensemaking framework", "Exploratory search: from finding to understanding"]}
 
-    newinputs = {str(1) : ['Visualizing Locations of Off-screen Objects on Mobile Devices: A Comparative Evaluation of Three Approaches', 'City Lights: Contextual Views in Minimal Space'],
-                 str(2) : ['An Adaptive and Dynamic Dimensionality Reduction Method for High-dimensional Indexing', 'The IGrid index: reversing the dimensionality curse for similarity indexing in high dimensional space'],
-                 str(3) : ['Generating comparative summaries of contradictory opinions in text','Mining Contrastive Opinions on Political Texts Using Cross-perspective Topic Model'],
-                 str(4): ['RDF-3X: A RISC-style Engine for RDF','SW-Store: A Vertically Partitioned DBMS for Semantic Web Data Management'],
-                 str(5): ['Cache-oblivious hashing','External Hashing with Limited Internal Storage'],
-                 str(6): ['A Survey of Web Clustering Engines', 'A Comprehensive Comparison Study of Document Clustering for a Biomedical Digital Library MEDLINE'],
-                 str(7): ['Web Search Clustering and Labeling with Hidden Topics','A Search Result Clustering Method Using Informatively Named Entities'],
-                 str(8): ['Automatically Building Research Reading ','Recommending Academic Papers via Users\' Reading Purposes'],
-                 str(9): ['Search-logger Analyzing Exploratory Search Tasks','Collaborative Multi-paradigm Exploratory Search'],
-                 str(10): ['Unsupervised query segmentation using generative language models and wikipedia','Two-stage query segmentation for information retrieval'],
-                 str(11): ['Search-logger Analyzing Exploratory Search Tasks','Clustering Versus Faceted Categories for Information Exploration'],
-                 str(12): ['A unified and discriminative model for query refinement','Exploring web scale language models for search query processing']
+    newinputs = {1: ['Visualizing Locations of Off-screen Objects on Mobile Devices: A Comparative Evaluation of Three Approaches', 'City Lights: Contextual Views in Minimal Space'],
+                 2: ['An Adaptive and Dynamic Dimensionality Reduction Method for High-dimensional Indexing', 'The IGrid index: reversing the dimensionality curse for similarity indexing in high dimensional space'],
+                 3: ['Generating comparative summaries of contradictory opinions in text','Mining Contrastive Opinions on Political Texts Using Cross-perspective Topic Model'],
+                 4: ['RDF-3X: A RISC-style Engine for RDF','SW-Store: A Vertically Partitioned DBMS for Semantic Web Data Management'],
+                 5: ['Cache-oblivious hashing','External Hashing with Limited Internal Storage'],
+                 6: ['A Survey of Web Clustering Engines', 'A Comprehensive Comparison Study of Document Clustering for a Biomedical Digital Library MEDLINE'],
+                 7: ['Web Search Clustering and Labeling with Hidden Topics','A Search Result Clustering Method Using Informatively Named Entities'],
+                 8: ['Automatically Building Research Reading ','Recommending Academic Papers via Users\' Reading Purposes'],
+                 9: ['Search-logger Analyzing Exploratory Search Tasks','Collaborative Multi-paradigm Exploratory Search'],
+                 10: ['Unsupervised query segmentation using generative language models and wikipedia','Two-stage query segmentation for information retrieval'],
+                 11: ['Search-logger Analyzing Exploratory Search Tasks','Clustering Versus Faceted Categories for Information Exploration'],
+                 12: ['A unified and discriminative model for query refinement','Exploring web scale language models for search query processing']
                  }
-    newtest(newinputs, se)
-    #oldtest(queryinputs, se)
+    return newtest(newinputs, se, num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank, final_kws=final_kws)
+    # oldtest(queryinputs, se)
 
 
-
-def newtest(newinputs, se):
+def newtest(newinputs, se, **kwargs):
+    ev_json = {"topics": dict(), "stats": dict(kwargs)}
     print("----------------- Test with \"new\" data --------------------")
     with open('json/evaluation.csv') as csvDataFile:
         evaluationcsv = pd.read_csv(csvDataFile, delimiter=',')
@@ -55,7 +58,7 @@ def newtest(newinputs, se):
     miss = 0
     nDCG_scores = []
     recall = []
-    pressision = []
+    precision = []
     ids = []
     del evaluationcsv['Unnamed: 0']
     evaluationcsv.columns = [str('topicid'), str('title'), str('ranking'), str('acmId')]
@@ -66,20 +69,26 @@ def newtest(newinputs, se):
             response = se.title_search(j)
             ids.append(response["hits"]["hits"][0]["_id"])
             papers.append(response["hits"]["hits"][0])
-        kq = se.select_keyquerie(papers)
+        kq = se.select_keyquerie(papers, final_kws=kwargs["final_kws"])
+        if not kq:
+            recall.append(0)
+            precision.append(0)
+            nDCG_scores.append(0)
+            continue
         score = 0
         if isinstance(kq, tuple):
             score_this = se.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=10)
         else:
             score_this = se.normal_search_exclude_ids(kq, ids=ids, size=10)
-        df = evaluationcsv[(evaluationcsv['topicid'] == int(i))]
+        df = evaluationcsv[(evaluationcsv['topicid'] == i)]
         for hit in score_this["hits"]["hits"]:
             for row in df['title']:
                 if hit["_source"]["title"] == row:
                     counter += 1
                     score += hit["_score"]
-                    lel = df[df['title'] == row]['ranking']
-                    if(int(lel) > 0):
+                    lel = df[df['title'] == row]['ranking'].head(1)
+                    print(lel)
+                    if int(lel) > 0:
                         goodhitcounter += 1
                     rel_score.append(int(lel))
                     break
@@ -97,23 +106,31 @@ def newtest(newinputs, se):
         for j in newinputs[i]:
             df = df[df['title'] != j]
 
-        temprecall = len([x for x in rel_score if x > 0])/ len(df)
-        temppressision = len([x for x in rel_score if x > 0])/len(rel_score)
-        print("For topicid:"+str(i)+" the score of found paper is: " + str(score))
-        print("Pressision@k: "+ str(temppressision))
-        print("Recall@k: "+ str(temprecall))
+        recall_t = len([x for x in rel_score if x > 0]) / len(df)
+        precision_t = len([x for x in rel_score if x > 0])/len(rel_score)
+        print("For topicid:" + str(i) + " the score of found paper is: " + str(score))
+        print("Precision@k: " + str(precision_t))
+        print("Recall@k: " + str(recall_t))
         print("The nDCG@10 score for this search is " + str(ndcg_score) + ".")
         counter = 0
         goodhitcounter = 0
-        recall.append(temprecall)
-        pressision.append(temppressision)
+        recall.append(recall_t)
+        precision.append(precision_t)
+
+        topic = {"score": score, "precision": precision_t, "recall": recall_t, "ndcg@10": ndcg_score}
+        ev_json["topics"][i] = topic
 
         papers.clear()
 
+    ev_json["stats"]["avg_ndcg@10"] = sum(nDCG_scores)/len(nDCG_scores)
+    ev_json["stats"]["avg_precision"] = sum(precision)/len(precision)
+    ev_json["stats"]["avg_recall"] = sum(recall)/len(recall)
+
     print("\nThe average nDCG@10 score is " + str(sum(nDCG_scores)/len(nDCG_scores)) + ".")
-    print("The average precision@k score is " + str(sum(pressision)/len(pressision)) + ".")
+    print("The average precision@k score is " + str(sum(precision)/len(precision)) + ".")
     print("The average recall@k score is " + str(sum(recall)/len(recall)) + ".")
 
+    return ev_json
 
 
 def oldtest(queryinputs, se):
@@ -165,3 +182,30 @@ def oldtest(queryinputs, se):
     print("\n""We did not find any paper in " + str(miss) + " out of " + str(len(queryinputs)) + " cases!")
     print("\n""Every expected paper was found in " + str(perfect) + " out of " + str(len(queryinputs)) + " cases!")
     print("\nThe average nDCG@10 score is " + str(sum(nDCG_scores)/len(nDCG_scores)) + ".")
+
+
+def start(**kwargs):
+    ev_json = evaluate(**kwargs)
+    with open("evaluation/b_" + "_".join(str(v) for k, v in standard_param.items() if k != "new_index"), "w") as fp:
+        json.dump(obj=ev_json, fp=fp)
+    print(str(ev_json))
+
+
+if __name__ == '__main__':
+    standard_param = {"new_index": False, "num_keywords": 9, "title_boost": 1, "min_rank": 50, "final_kws": 9}
+    start(**standard_param)
+    standard_param["final_kws"] = 13
+    standard_param["new_index"] = False
+    start(**standard_param)
+    standard_param["final_kws"] = 9
+    standard_param["new_index"] = True
+    standard_param["title_boost"] = 2
+    start(**standard_param)
+    standard_param["title_boost"] = 1
+    standard_param["min_rank"] = 20
+    start(**standard_param)
+    standard_param["min_rank"] = 100
+    start(**standard_param)
+    standard_param["min_rank"] = 50
+    standard_param["num_keywords"] = 11
+    start(**standard_param)

@@ -5,9 +5,10 @@ import evaluation
 
 def main():
     se = searchengine.Searchengine()
+    se.start()
     '''use this to test new changes
             True if you want to index the test data (obviously has to be done), this will override current index'''
-    evaluation.evaluate(False)
+    # evaluation.evaluate(new_index=False)
 
 
     #t1 = time.time()
