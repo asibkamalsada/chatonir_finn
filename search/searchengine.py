@@ -401,8 +401,12 @@ class Searchengine:
         kqss_v = [paper["_source"].get("keyqueries") for paper in papers if paper["_source"].get("keyqueries")]
         kqss = [kqs for kqs_v in kqss_v for kqs in kqs_v]
         ids = {paper["_id"] for paper in papers}
+        allkeys = []
+        for dic in kqss_v:
+            for key in dic:
+                allkeys.append(key)
 
-        revindex = Counter(kqss)
+        revindex = Counter(allkeys)
 
         candidates = [k for k, v in revindex.items() if float(v) >= len(papers)]
         selected = ""
