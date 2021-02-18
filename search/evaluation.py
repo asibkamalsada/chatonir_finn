@@ -8,17 +8,7 @@ import pandas as pd
 import itertools
 
 
-def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_kws=9):
-    se = searchengine.Searchengine()
-    if new_index:
-        se.create_index()
-        se.index_data(se.readJSON("json/data.json"))
-   #     se.index_data(se.readJSON("json/testdata.json"))
-        se.index_data(se.readJSON('json/noise.json'))
-        # se.fill_documents('json/fulltexts.json')
-    se.update_keyqueries(num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank)
-    se.es_client.indices.refresh(se.INDEX_NAME)
-
+def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_kws=9, buchstabe=None):
     queryinputs = {tuple(["Halo: a technique for visualizing off-screen objects", "Wedge: clutter-free visualization of off-screen locations"]) : ["Visualizing references to off-screen content on mobile devices: A comparison of Arrows, Wedge, and Overview+Detail","Visualizing locations of off-screen objects on mobile devices: a comparative evaluation of three approaches"],
                    tuple(["Towards optimum query segmentation: in doubt without", "Query segmentation based on eigenspace similarity", "Unsupervised query segmentation using click data: preliminary results"]): ["An IR-based evaluation framework for web search query segmentation","Query segmentation using conditional random fields."],
                    tuple(["On the effects of dimensionality reduction on high dimensional similarity search"]) : ["Automatic subspace clustering of high dimensional data for data mining applications","Can shared-neighbor distances defeat the curse of dimensionality?", "Density-based indexing for approximate nearest-neighbor queries"],
@@ -54,20 +44,41 @@ def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_
                  12: ['A unified and discriminative model for query refinement',
                       'Exploring web scale language models for search query processing']
                  }
-    '''
-    newinputs = {1: ['Visualization of Off-screen Objects in Mobile Augmented Reality', 'EdgeSplit: Facilitating the Selection of Off-screen Objects'],
-                 2: ['An Adaptive and Dynamic Dimensionality Reduction Method for High-dimensional Indexing', 'Dimensionality reduction and similarity computation by inner product approximations'],
-                 3: ['Mining Contrastive Opinions on Political Texts Using Cross-perspective Topic Model','Mining contentions from discussions and debates'],
-                 4: ['RDF-3X: A RISC-style Engine for RDF','The RDF-3X Engine for Scalable Management of RDF Data'],
-                 5: ['File Organization Using Composite Perfect Hashing','External Hashing with Limited Internal Storage'],
-                 6: ['Exploring the cluster hypothesis, and cluster-based retrieval, over the web', 'The cluster hypothesis revisited'],
-                 7: ['Web Search Clustering and Labeling with Hidden Topics','A Search Result Clustering Method Using Informatively Named Entities'],
-                 8: ['Beyond keyword search: discovering relevant scientific literature ','Towards an effective and unbiased ranking of scientific literature through mutual reinforcement'],
-                 9: ['Search-logger Analyzing Exploratory Search Tasks','Collaborative Multi-paradigm Exploratory Search'],
-                 10: ['The power of naive query segmentation','Unsupervised query segmentation using only query logs'],
-                 11: ['Search-logger Analyzing Exploratory Search Tasks','Clustering Versus Faceted Categories for Information Exploration'],
-                 12: ['Unsupervised query segmentation using clickthrough for information retrieval','Mining query structure from click data: a case study of product queries']
-                 }'''
+
+    newinputs2 = {1: ['Visualization of Off-screen Objects in Mobile Augmented Reality',
+                      'EdgeSplit: Facilitating the Selection of Off-screen Objects'],
+                  2: ['An Adaptive and Dynamic Dimensionality Reduction Method for High-dimensional Indexing',
+                      'Dimensionality reduction and similarity computation by inner product approximations'],
+                  3: ['Mining Contrastive Opinions on Political Texts Using Cross-perspective Topic Model',
+                      'Mining contentions from discussions and debates'],
+                  4: ['RDF-3X: A RISC-style Engine for RDF', 'The RDF-3X Engine for Scalable Management of RDF Data'],
+                  5: ['File Organization Using Composite Perfect Hashing',
+                      'External Hashing with Limited Internal Storage'],
+                  6: ['Exploring the cluster hypothesis, and cluster-based retrieval, over the web',
+                      'The cluster hypothesis revisited'],
+                  7: ['Web Search Clustering and Labeling with Hidden Topics',
+                      'A Search Result Clustering Method Using Informatively Named Entities'],
+                  8: ['Beyond keyword search: discovering relevant scientific literature ',
+                      'Towards an effective and unbiased ranking of scientific literature through mutual reinforcement'],
+                  9: ['Search-logger Analyzing Exploratory Search Tasks',
+                      'Collaborative Multi-paradigm Exploratory Search'],
+                  10: ['The power of naive query segmentation', 'Unsupervised query segmentation using only query logs'],
+                  11: ['Search-logger Analyzing Exploratory Search Tasks',
+                       'Clustering Versus Faceted Categories for Information Exploration'],
+                  12: ['Unsupervised query segmentation using clickthrough for information retrieval',
+                       'Mining query structure from click data: a case study of product queries']
+                  }
+
+    se = searchengine.Searchengine()
+    if new_index:
+        se.create_index()
+        se.index_data(se.readJSON("json/data.json"))
+        # se.index_data(se.readJSON("json/testdata.json"))
+        se.index_data(se.readJSON('json/noise10000.json'))
+        # se.fill_documents('json/abstracts.json')
+        # se.fill_documents('json/fulltexts.json')
+    se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank)
+    se.es_client.indices.refresh(se.INDEX_NAME)
 
     baseline(newinputs, se)
     #newtest(newinputs, se)
@@ -181,18 +192,21 @@ def newtest(newinputs, se, **kwargs):
             ids.append(response["hits"]["hits"][0]["_id"])
             papers.append(response["hits"]["hits"][0])
         kq = se.select_keyquerie(papers, final_kws=kwargs["final_kws"])
-        if not kq:
-            recall.append(0)
-            precision.append(0)
-            nDCG_scores.append(0)
-            continue
-        score = 0
-        if isinstance(kq, tuple):
-            score_this = se.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=10)
+        if kq:
+            if isinstance(kq, tuple):
+                score_this = se.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=10)["hits"]["hits"]
+            else:
+                score_this = se.normal_search_exclude_ids(kq, ids=ids, size=10)["hits"]["hits"]
         else:
-            score_this = se.normal_search_exclude_ids(kq, ids=ids, size=10)
+            score_this = se.option4(papers)
+            # recall.append(0)
+            # precision.append(0)
+            # nDCG_scores.append(0)
+            # continue
+        score = 0
+
         df = evaluationcsv[(evaluationcsv['topicid'] == i)]
-        for hit in score_this["hits"]["hits"]:
+        for hit in score_this[:10]:
             found = False
             for row in df['title']:
                 if hit["_source"]["title"] == row:
@@ -299,13 +313,14 @@ def oldtest(queryinputs, se):
 
 def start(**kwargs):
     ev_json = evaluate(**kwargs)
-    with open("evaluation/c_" + "_".join(str(v) for k, v in standard_param.items() if k != "new_index"), "w") as fp:
+    with open("evaluation/" + "_".join(str(v) for k, v in standard_param.items() if k != "new_index"), "w") as fp:
         json.dump(obj=ev_json, fp=fp)
     print(str(ev_json))
 
 
 if __name__ == '__main__':
-    standard_param = {"new_index": False, "num_keywords": 9, "title_boost": 1, "min_rank": 100, "final_kws": 9}
+    buchstabe = "q"
+    standard_param = {"buchstabe": buchstabe, "new_index": True, "num_keywords": 9, "title_boost": 1, "min_rank": 50, "final_kws": 9, }
     # start(**standard_param)
     # standard_param["final_kws"] = 13
     # standard_param["new_index"] = False
@@ -320,5 +335,5 @@ if __name__ == '__main__':
     # standard_param["min_rank"] = 100
     # start(**standard_param)
     # standard_param["min_rank"] = 50
-    standard_param["num_keywords"] = 11
+    # standard_param["num_keywords"] = 11
     start(**standard_param)

@@ -85,10 +85,14 @@ class Searchengine:
         """ Creates an Elasticsearch index."""
         is_created = False
         # Index settings
+        analyzer = {"default": {"tokenizer": "standard", "filter": ["lowercase", "porter_stem"]}}
         settings = {
             "settings": {
                 "number_of_shards": 1,
-                "number_of_replicas": 1
+                "number_of_replicas": 1,
+                "analysis": {
+                    "analyzer": analyzer
+                }
             },
             "mappings": {
                 "dynamic": "true",
@@ -292,6 +296,19 @@ class Searchengine:
 
         self.chunk_update_field(gen)
 
+    def update_keyqueries_without_noise(self, new_inputs, num_keywords=9, title_boost=9, min_rank=50):
+        hits = []
+
+        for titles in new_inputs.values():
+            for title in titles:
+                hits.extend(self.title_search(title, size=1)["hits"]["hits"])
+
+        kwqss = calc_kwss_kqss(hits, num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank)
+        if kwqss:
+            self.chunk_update_field(((_id, {"keywords": kws, "keyqueries": kqs})
+                                    for (_id, (kws, kqs)) in kwqss.items()),
+                                    page_size=len(kwqss))
+
     def update_keyqueries(self, num_keywords=9, title_boost=9, min_rank=50):
         self.es_client.indices.refresh(index=self.INDEX_NAME)
         doc_count = self.es_client.indices.stats(index=self.INDEX_NAME, metric="docs")["indices"][self.INDEX_NAME]["total"]["docs"]["count"]
@@ -387,7 +404,7 @@ class Searchengine:
             }
         }
         content = json.dumps([hit["_source"] for hit in self.es_client.search(body=query, index=self.INDEX_NAME)["hits"]["hits"]])
-        with open("json/noise.json", "w") as file:
+        with open(f"json/noise{size}.json", "w") as file:
             file.write(content)
 
     def extract_json(self, search_phrase, file_name=None):
@@ -398,8 +415,9 @@ class Searchengine:
                 json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
 
     def select_keyquerie(self, papers, final_kws=9):
+        # return self.option5(papers, num_keywords=final_kws)
+
         kqss_v = [paper["_source"].get("keyqueries") for paper in papers if paper["_source"].get("keyqueries")]
-        kqss = [kqs for kqs_v in kqss_v for kqs in kqs_v]
         ids = {paper["_id"] for paper in papers}
         allkeys = []
         for dic in kqss_v:
@@ -407,6 +425,8 @@ class Searchengine:
                 allkeys.append(key)
 
         revindex = Counter(allkeys)
+
+        # print(sorted(revindex.items(), key=lambda x: x[1], reverse=True))
 
         candidates = [k for k, v in revindex.items() if float(v) >= len(papers)]
         selected = ""
@@ -430,19 +450,24 @@ class Searchengine:
             print("\n---------------------- Option 2 ------------------------")
             max_keywords = frozenset.union(*solutions.keys())
             k = keyqueries.Keyqueries()
-            keyout = []
+            keyout = set()
 
             if len(max_keywords) <= final_kws:
-                output = k.best_kq(_ids=ids, keywords=list(max_keywords))
+                output = k.best_kq(_ids=list(ids), keywords=list(max_keywords))
                 return output
 
             max_anz = sum(len(v) for v in solutions.values())
             for solution, _ids in solutions.items():
-                keywords = dict(*(self.id_search(_id)["_source"].get("keywords") for _id in _ids))
-                sorted_merge = dict(sorted(keywords.items(), key=lambda item: item[1], reverse=True))
+                keywords = dict()
+                for _id in _ids:
+                    for keyword, value in self.id_search(_id)["_source"].get("keywords").items():
+                        if keyword in solution:
+                            old_v = keywords.get(keyword, 0)
+                            keywords[keyword] = old_v + value
+                sorted_merge = sorted(keywords.items(), key=lambda item: item[1], reverse=True)
                 allowed_n = math.ceil((len(_ids) / max_anz) * final_kws)
-                keyout.extend(list(sorted_merge.keys())[:allowed_n])
-            output = k.best_kq(_ids=ids, keywords=keyout)
+                keyout.update({keyword for (keyword, value) in sorted_merge[:allowed_n]})
+            output = k.best_kq(_ids=list(ids), keywords=list(keyout))
             return output
 
         print("\n---------------------- Option 3 ------------------------")
@@ -455,7 +480,7 @@ class Searchengine:
                 top_kwss.update(kqs_v_srtd[0][0])
         with ThreadPoolExecutor(max_workers=1) as pool:
             try:
-                return next(pool.map(k.best_kq, (ids,), (top_kwss,), timeout=120), None)
+                return next(pool.map(k.best_kq, (list(ids),), (list(top_kwss),), timeout=120), None)
             except TimeoutError:
                 pass
 
@@ -534,3 +559,31 @@ class Searchengine:
 
     def full_text_search(self):
         pass
+
+    def option4(self, papers):
+        print("\n---------------------- Option 4 ------------------------")
+        ids = {paper["_id"] for paper in papers}
+        score_this = []
+        for paper in papers:
+            kqs_v = paper["_source"].get("keyqueries")
+            kq, _ = sorted(kqs_v.items(), key=lambda x: x[1], reverse=True)[0]
+            score_this.append(self.normal_search_exclude_ids(kq, ids=list(ids))["hits"]["hits"])
+        thislist = list(itertools.chain.from_iterable(score_this))
+        thislist.sort(key=lambda x: x["_score"], reverse=True)
+        thislist = [item for item in thislist if item["_score"] == max([item2["_score"] for item2 in thislist if item["_id"] == item2["_id"]])]
+        # for item in thislist:
+        #     for seconditem in thislist:
+        #         if not item == seconditem:
+        #             if item["_id"] == seconditem["_id"]:
+        #                 thislist.remove(item)
+        return thislist
+
+    def option5(self, papers, num_keywords=9):
+        print("\n---------------------- Option 5 ------------------------")
+
+        k = keyqueries.Keyqueries()
+        ids = {paper["_id"] for paper in papers}
+        kws = k.extract_keywords_op5(papers, num_keywords=num_keywords)
+        kq = k.best_kq(_ids=ids, keywords=kws)
+
+        return kq

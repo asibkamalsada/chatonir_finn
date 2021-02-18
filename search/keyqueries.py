@@ -13,11 +13,30 @@ class Keyqueries:
 
         self.INDEX_NAME = "paper"
 
+    def extract_keywords_op5(self, seeds, num_keywords=9):
+
+        text = "\n".join(f'{seed["_source"].get("abstract", "")}\n{seed["_source"].get("title", "")}\n{seed["_source"].get("fulltext", "")}' for seed in seeds)
+
+        self.extractor.analyze(text, candidate_pos=['NOUN', 'PROPN', 'ADJ', 'VERB'], window_size=4, lower=True)
+        keywords_dict = self.extractor.get_keywords(num_keywords)
+
+        return keywords_dict
+
     def extract_keywords(self, seed, num_keywords=9):
         source = seed["_source"]
-        self.extractor.analyze(f'{source.get("abstract", "")}\n{source.get("title", "")}\n{source.get("fulltext", "")}',
-                               candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=True)
+        t = f'{source.get("abstract", "")}\n{source.get("title", "")}\n{source.get("fulltext", "")}'
+        x = self.es.indices.analyze(
+            index=self.INDEX_NAME,
+            body={
+                "tokenizer": "standard", "filter": ["lowercase", "porter_stem"],
+                "text": t
+            })
+        x = [token['token'] for token in x["tokens"]]
+        t = " ".join(x)
+        self.extractor.analyze(t, candidate_pos=['NOUN', 'PROPN', 'ADJ', 'VERB'], window_size=4, lower=True)
         keywords_dict = self.extractor.get_keywords(num_keywords)
+        print(f"{source.get('title', '')}\n{keywords_dict.keys()}\n")
+        # keywords_dict = dict((kw.lower(), i) for (i, kw) in enumerate(source.get("title").split()))
         # print(keywords_dict)
         return keywords_dict
 
@@ -26,7 +45,7 @@ class Keyqueries:
             # print(qws, seed_scores)
             yield qws, seed_scores[_id]
 
-    def multi_kq(self, _ids, keywords, min_rank=50, title_boost=2):
+    def multi_kq(self, _ids, keywords, min_rank=50, title_boost=2, abstract_boost=1):
         if not keywords:
             return
         if isinstance(keywords, dict):
@@ -45,7 +64,7 @@ class Keyqueries:
                     "query": {
                         "multi_match": {
                             "query": " ".join(qws),
-                            "fields": [f"title^{title_boost}", "abstract", "fulltext"],
+                            "fields": [f"title^{title_boost}", f"abstract^{abstract_boost}", "fulltext"],
                             "operator": "and"
                         },
                     },

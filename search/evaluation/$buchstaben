@@ -1,0 +1,15 @@
+komische keywords
+d: option4/5 etc testing
+e: option 5 mit fulltexts, 10000 noise
+f: optionen 1,2,3 mit fulltexts, 10000 noise
+g: option 5 mit fulltexts, 10000 noise
+schlaue keywords
+h: wie f
+
+stemming
+t: wie h
+
+r: nur option 2/3
+s: option 1,2,3 fixed option2
+
+q: analyzer ohne NOUN
