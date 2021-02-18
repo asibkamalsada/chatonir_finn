@@ -30,6 +30,31 @@ def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_
                    tuple(["A source independent framework for research paper recommendation.", "SOFIA SEARCH: a tool for automating related-work search"]): ["Recommending citations: translating papers into references", "Context-aware citation recommendation"],
                    tuple(["Model-driven formative evaluation of exploratory search: A study under a sensemaking framework Share on", "Exploratory search: from finding to understanding"]): ["Model-driven formative evaluation of exploratory search: A study under a sensemaking framework", "Exploratory search: from finding to understanding"]}
 
+    newinputs = {1: ['Visualizing Locations of Off-screen Objects on Mobile Devices: A Comparative Evaluation of Three Approaches',
+                     'City Lights: Contextual Views in Minimal Space'],
+                 2: ['An Adaptive and Dynamic Dimensionality Reduction Method for High-dimensional Indexing',
+                     'The IGrid index: reversing the dimensionality curse for similarity indexing in high dimensional space'],
+                 3: ['Generating comparative summaries of contradictory opinions in text',
+                     'Mining Contrastive Opinions on Political Texts Using Cross-perspective Topic Model'],
+                 4: ['RDF-3X: A RISC-style Engine for RDF',
+                     'SW-Store: A Vertically Partitioned DBMS for Semantic Web Data Management'],
+                 5: ['Cache-oblivious hashing', 'External Hashing with Limited Internal Storage'],
+                 6: ['A Survey of Web Clustering Engines',
+                     'A Comprehensive Comparison Study of Document Clustering for a Biomedical Digital Library MEDLINE'],
+                 7: ['Web Search Clustering and Labeling with Hidden Topics',
+                     'A Search Result Clustering Method Using Informatively Named Entities'],
+                 8: ['Automatically Building Research Reading ',
+                     'Recommending Academic Papers via Users\' Reading Purposes'],
+                 9: ['Search-logger Analyzing Exploratory Search Tasks',
+                     'Collaborative Multi-paradigm Exploratory Search'],
+                 10: ['Unsupervised query segmentation using generative language models and wikipedia',
+                      'Two-stage query segmentation for information retrieval'],
+                 11: ['Search-logger Analyzing Exploratory Search Tasks',
+                      'Clustering Versus Faceted Categories for Information Exploration'],
+                 12: ['A unified and discriminative model for query refinement',
+                      'Exploring web scale language models for search query processing']
+                 }
+    '''
     newinputs = {1: ['Visualization of Off-screen Objects in Mobile Augmented Reality', 'EdgeSplit: Facilitating the Selection of Off-screen Objects'],
                  2: ['An Adaptive and Dynamic Dimensionality Reduction Method for High-dimensional Indexing', 'Dimensionality reduction and similarity computation by inner product approximations'],
                  3: ['Mining Contrastive Opinions on Political Texts Using Cross-perspective Topic Model','Mining contentions from discussions and debates'],
@@ -42,7 +67,8 @@ def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_
                  10: ['The power of naive query segmentation','Unsupervised query segmentation using only query logs'],
                  11: ['Search-logger Analyzing Exploratory Search Tasks','Clustering Versus Faceted Categories for Information Exploration'],
                  12: ['Unsupervised query segmentation using clickthrough for information retrieval','Mining query structure from click data: a case study of product queries']
-                 }
+                 }'''
+
     baseline(newinputs, se)
     #newtest(newinputs, se)
 
