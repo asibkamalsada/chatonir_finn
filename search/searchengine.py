@@ -534,6 +534,16 @@ class Searchengine:
             return "Those paper are not compatible for the keyquerie search. Sorry."
     '''
 
+    def dontcareaboutcoverageofkeyqueries(self, docs_p):
+        kqs = dict()
+        for doc in docs_p:
+            for kq_str, score in doc["_source"].get("keyqueries", (None, None)):
+                if kq_str and score:
+                    kq = frozenset(kq_str.split())
+                    kqs[kq] = kqs.get(kq, 0.0) + score
+
+        return sorted(kqs.items(), key=lambda x: x[1], reverse=True)[0]
+
     def option2(self, docs_p):
         docs = []
         for doc_p in docs_p:
