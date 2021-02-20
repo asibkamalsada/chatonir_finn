@@ -8,6 +8,7 @@ from elasticsearch import Elasticsearch
 
 class Keyqueries:
     def __init__(self):
+
         self.es = Elasticsearch()
         self.extractor = textrank.TextRank4Keyword()
 
@@ -22,30 +23,29 @@ class Keyqueries:
 
         return keywords_dict
 
-    def extract_keywords(self, seed, num_keywords=9):
+    def extract_keywords(self, seed, num_keywords=9, candidate_pos=('NOUN', 'PROPN'), analyzer=None):
+        if not analyzer:
+            analyzer = {"tokenizer": "standard", "filter": ["lowercase", "porter_stem"]}
         source = seed["_source"]
         t = f'{source.get("abstract", "")}\n{source.get("title", "")}\n{source.get("fulltext", "")}'
-        x = self.es.indices.analyze(
-            index=self.INDEX_NAME,
-            body={
-                "tokenizer": "standard", "filter": ["lowercase", "porter_stem"],
-                "text": t
-            })
+        body = analyzer.copy()
+        body["text"] = t
+        x = self.es.indices.analyze(index=self.INDEX_NAME, body=body)
         x = [token['token'] for token in x["tokens"]]
         t = " ".join(x)
-        self.extractor.analyze(t, candidate_pos=['NOUN', 'PROPN', 'ADJ', 'VERB'], window_size=4, lower=True)
+        self.extractor.analyze(t, candidate_pos=candidate_pos, window_size=4, lower=True)
         keywords_dict = self.extractor.get_keywords(num_keywords)
         print(f"{source.get('title', '')}\n{keywords_dict.keys()}\n")
         # keywords_dict = dict((kw.lower(), i) for (i, kw) in enumerate(source.get("title").split()))
         # print(keywords_dict)
         return keywords_dict
 
-    def single_kq(self, _id, keywords, min_rank=50, title_boost=2):
-        for qws, seed_scores in self.multi_kq([_id], keywords, min_rank, title_boost):
+    def single_kq(self, _id, keywords, min_rank=50):
+        for qws, seed_scores in self.multi_kq([_id], keywords, min_rank=min_rank):
             # print(qws, seed_scores)
             yield qws, seed_scores[_id]
 
-    def multi_kq(self, _ids, keywords, min_rank=50, title_boost=2, abstract_boost=1):
+    def multi_kq(self, _ids, keywords, min_rank=50, title_boost=1, abstract_boost=1):
         if not keywords:
             return
         if isinstance(keywords, dict):

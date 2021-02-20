@@ -22,7 +22,7 @@ def print_return(param):
     return param
 
 
-def calc_kwss_kqss(entries, num_keywords=9, min_rank=50, title_boost=2):
+def calc_kwss_kqss(entries, num_keywords=9, min_rank=50, candidate_pos=('NOUN', 'PROPN')):
     k = keyqueries.Keyqueries()
     old_size = len(entries)
     entries = [entry for entry in entries if entry["_source"].get("keyqueries", -1) == -1]
@@ -30,9 +30,9 @@ def calc_kwss_kqss(entries, num_keywords=9, min_rank=50, title_boost=2):
         print(f"first entry: {entries[0]}\ndid not read {len(entries)} out of {old_size} possible docs in chunk... ")
         kwqss = dict()
         for entry in entries:
-            kws = k.extract_keywords(entry, num_keywords=num_keywords)
+            kws = k.extract_keywords(entry, num_keywords=num_keywords, candidate_pos=candidate_pos)
             kqs = {" ".join(qws): score
-                   for (qws, score) in k.single_kq(entry["_id"], kws, min_rank=min_rank, title_boost=title_boost)}
+                   for (qws, score) in k.single_kq(entry["_id"], kws, min_rank=min_rank)}
             kwqss[entry["_id"]] = (kws, kqs)
         return kwqss
         # kwss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
@@ -85,13 +85,16 @@ class Searchengine:
         """ Creates an Elasticsearch index."""
         is_created = False
         # Index settings
-        analyzer = {"default": {"tokenizer": "standard", "filter": ["lowercase", "porter_stem"]}}
+        analyzer = {"tokenizer": "standard", "filter": ["lowercase", "porter_stem"]}
         settings = {
             "settings": {
                 "number_of_shards": 1,
                 "number_of_replicas": 1,
                 "analysis": {
-                    "analyzer": analyzer
+                    "analyzer": {
+                        "default":
+                            analyzer
+                    }
                 }
             },
             "mappings": {
@@ -103,7 +106,7 @@ class Searchengine:
                     "title": {"type": "text"},
                     "dblpKey": {"type": "keyword"},
                     "doi": {"type": "keyword"},
-                    "authors": {"type": "text"},
+                    "authors": {"type": "keyword"},
                     "publisher": {"type": "keyword"},
                     "booktitle": {"type": "text"},
                     "keyqueries": {"type": "flattened"},
@@ -275,7 +278,7 @@ class Searchengine:
                     print("Wrong Input, pls try again!")
 
             print('currently selected papers: [\n    {}\n]'.format(
-                "\n    ".join(paper['_source']['title'] for paper in papers)))
+                "\n    ".join(str(paper['_source']) for paper in papers)))
 
             ask = input("Do you want to add another paper [Y/n]?")
             if ask == 'n':
@@ -296,20 +299,35 @@ class Searchengine:
 
         self.chunk_update_field(gen)
 
-    def update_keyqueries_without_noise(self, new_inputs, num_keywords=9, title_boost=9, min_rank=50):
+    def update_keyqueries_without_noise(self, new_inputs, num_keywords=9, min_rank=50, candidate_pos=('NOUN', 'PROPN')):
+        self.es_client.indices.refresh(index=self.INDEX_NAME)
         hits = []
 
         for titles in new_inputs.values():
             for title in titles:
                 hits.extend(self.title_search(title, size=1)["hits"]["hits"])
 
-        kwqss = calc_kwss_kqss(hits, num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank)
+        kwqss = calc_kwss_kqss(hits, num_keywords=num_keywords, min_rank=min_rank, candidate_pos=candidate_pos)
         if kwqss:
-            self.chunk_update_field(((_id, {"keywords": kws, "keyqueries": kqs})
-                                    for (_id, (kws, kqs)) in kwqss.items()),
-                                    page_size=len(kwqss))
+            try_n = 1
+            while try_n < 5:
+                try:
+                    self.chunk_update_field(((_id, {"keywords": kws, "keyqueries": kqs})
+                                            for (_id, (kws, kqs)) in kwqss.items()),
+                                            page_size=len(kwqss))
+                    break
+                except ElasticsearchException as e:
+                    print(f"exception {e} occured on try {try_n}")
+                    print(kwqss)
+                    try_n += 1
+            else:
+                print("could not read that stuff in")
+                return False
+        else:
+            print("no keyqueries calculated")
+        return True
 
-    def update_keyqueries(self, num_keywords=9, title_boost=9, min_rank=50):
+    def update_keyqueries(self, num_keywords=9, min_rank=50, candidate_pos=('NOUN', 'PROPN')):
         self.es_client.indices.refresh(index=self.INDEX_NAME)
         doc_count = self.es_client.indices.stats(index=self.INDEX_NAME, metric="docs")["indices"][self.INDEX_NAME]["total"]["docs"]["count"]
         cpu_count = ceil(multiprocessing.cpu_count()*2)
@@ -328,8 +346,8 @@ class Searchengine:
             for kwqss in executor.map(calc_kwss_kqss,
                                       self.chunk_iterate_docs(page_size=chunk_size),
                                       (n for n in infinite(num_keywords)),
-                                      (t for t in infinite(title_boost)),
-                                      (m for m in infinite(min_rank))):
+                                      (m for m in infinite(min_rank)),
+                                      (c for c in infinite(candidate_pos))):
                 if not kwqss:
                     continue
                 try_n = 1
@@ -414,7 +432,7 @@ class Searchengine:
             file.write(
                 json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
 
-    def select_keyquerie(self, papers, final_kws=9):
+    def select_keyquerie(self, papers, final_kws=9, min_rank=50):
         # return self.option5(papers, num_keywords=final_kws)
 
         kqss_v = [paper["_source"].get("keyqueries") for paper in papers if paper["_source"].get("keyqueries")]
@@ -443,7 +461,7 @@ class Searchengine:
                     selected = temp
                 else:
                     candidates.remove(temp)
-            return selected
+            return selected, 1
 
         solutions = self.option2(papers)
         if solutions:
@@ -453,8 +471,8 @@ class Searchengine:
             keyout = set()
 
             if len(max_keywords) <= final_kws:
-                output = k.best_kq(_ids=list(ids), keywords=list(max_keywords))
-                return output
+                output = k.best_kq(_ids=list(ids), keywords=list(max_keywords), min_rank=min_rank)
+                return output, 2
 
             max_anz = sum(len(v) for v in solutions.values())
             for solution, _ids in solutions.items():
@@ -467,8 +485,8 @@ class Searchengine:
                 sorted_merge = sorted(keywords.items(), key=lambda item: item[1], reverse=True)
                 allowed_n = math.ceil((len(_ids) / max_anz) * final_kws)
                 keyout.update({keyword for (keyword, value) in sorted_merge[:allowed_n]})
-            output = k.best_kq(_ids=list(ids), keywords=list(keyout))
-            return output
+            output = k.best_kq(_ids=list(ids), keywords=list(keyout), min_rank=min_rank)
+            return output, 2
 
         print("\n---------------------- Option 3 ------------------------")
         k = keyqueries.Keyqueries()
@@ -480,9 +498,10 @@ class Searchengine:
                 top_kwss.update(kqs_v_srtd[0][0])
         with ThreadPoolExecutor(max_workers=1) as pool:
             try:
-                return next(pool.map(k.best_kq, (list(ids),), (list(top_kwss),), timeout=120), None)
+                return next(pool.map(k.best_kq, (list(ids),), (list(top_kwss),), timeout=120), None), 3
             except TimeoutError:
                 pass
+        return None, None
 
     '''
         if revindex.most_common(1)[0][1] > 1:

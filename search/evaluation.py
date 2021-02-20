@@ -1,4 +1,9 @@
+import glob
 import json
+import os
+import sys
+from collections import Counter
+from datetime import datetime
 
 import searchengine
 import time
@@ -8,7 +13,7 @@ import pandas as pd
 import itertools
 
 
-def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_kws=9, buchstabe=None):
+def evaluate(new_index=False, num_keywords=9, min_rank=50, buchstabe=None, k=10, candidate_pos=('NOUN', 'PROPN')):
     queryinputs = {tuple(["Halo: a technique for visualizing off-screen objects", "Wedge: clutter-free visualization of off-screen locations"]) : ["Visualizing references to off-screen content on mobile devices: A comparison of Arrows, Wedge, and Overview+Detail","Visualizing locations of off-screen objects on mobile devices: a comparative evaluation of three approaches"],
                    tuple(["Towards optimum query segmentation: in doubt without", "Query segmentation based on eigenspace similarity", "Unsupervised query segmentation using click data: preliminary results"]): ["An IR-based evaluation framework for web search query segmentation","Query segmentation using conditional random fields."],
                    tuple(["On the effects of dimensionality reduction on high dimensional similarity search"]) : ["Automatic subspace clustering of high dimensional data for data mining applications","Can shared-neighbor distances defeat the curse of dimensionality?", "Density-based indexing for approximate nearest-neighbor queries"],
@@ -21,11 +26,11 @@ def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_
                    tuple(["Model-driven formative evaluation of exploratory search: A study under a sensemaking framework Share on", "Exploratory search: from finding to understanding"]): ["Model-driven formative evaluation of exploratory search: A study under a sensemaking framework", "Exploratory search: from finding to understanding"]}
 
     newinputs = {1: ['Visualizing Locations of Off-screen Objects on Mobile Devices: A Comparative Evaluation of Three Approaches',
-                     'City Lights: Contextual Views in Minimal Space'],
+                     'City Lights: Contextual Views in Minimal Space'],  # x
                  2: ['An Adaptive and Dynamic Dimensionality Reduction Method for High-dimensional Indexing',
                      'The IGrid index: reversing the dimensionality curse for similarity indexing in high dimensional space'],
                  3: ['Generating comparative summaries of contradictory opinions in text',
-                     'Mining Contrastive Opinions on Political Texts Using Cross-perspective Topic Model'],
+                     'Mining Contrastive Opinions on Political Texts Using Cross-perspective Topic Model'],  # x
                  4: ['RDF-3X: A RISC-style Engine for RDF',
                      'SW-Store: A Vertically Partitioned DBMS for Semantic Web Data Management'],
                  5: ['Cache-oblivious hashing', 'External Hashing with Limited Internal Storage'],
@@ -74,19 +79,20 @@ def evaluate(new_index=False, num_keywords=9, title_boost=2, min_rank=50, final_
         se.create_index()
         se.index_data(se.readJSON("json/data.json"))
         # se.index_data(se.readJSON("json/testdata.json"))
-        se.index_data(se.readJSON('json/noise10000.json'))
+        se.index_data(se.readJSON('json/noise9998.json'))
         # se.fill_documents('json/abstracts.json')
         # se.fill_documents('json/fulltexts.json')
-    se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank)
-    se.es_client.indices.refresh(se.INDEX_NAME)
+    read_kq = se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, min_rank=min_rank, candidate_pos=candidate_pos)
+    if read_kq:
+        se.es_client.indices.refresh(se.INDEX_NAME)
 
-    baseline(newinputs, se)
-    #newtest(newinputs, se)
+        # baseline(newinputs, se, k=k)
+        # newtest(newinputs, se)
 
-    return newtest(newinputs, se, num_keywords=num_keywords, title_boost=title_boost, min_rank=min_rank, final_kws=final_kws)
+        return newtest(newinputs, se, num_keywords=num_keywords, min_rank=min_rank, k=k)
 
 
-def baseline(newinputs, se):
+def baseline(newinputs, se, k=10):
     print("----------------- Baseline Test --------------------")
     with open('json/evaluation.csv') as csvDataFile:
         evaluationcsv = pd.read_csv(csvDataFile, delimiter=',')
@@ -111,7 +117,7 @@ def baseline(newinputs, se):
         score = 0
         score_this = []
         for title in papers:
-            score_this.append(se.normal_search_exclude_ids(title["_source"]["title"], ids=ids, size=10)["hits"]["hits"])
+            score_this.append(se.normal_search_exclude_ids(title["_source"]["title"], ids=ids, size=k)["hits"]["hits"])
         thislist = list(itertools.chain.from_iterable(score_this))
         thislist.sort(key=lambda x: x["_score"], reverse=True)
         for item in thislist:
@@ -121,7 +127,7 @@ def baseline(newinputs, se):
                         thislist.remove(item)
 
         df = evaluationcsv[(evaluationcsv['topicid'] == int(i))]
-        for hit in thislist[:10]:
+        for hit in thislist[:k]:
             found = False
             for row in df['title']:
                 if hit["_source"]["title"] == row:
@@ -152,9 +158,9 @@ def baseline(newinputs, se):
         temprecall = len([x for x in rel_score if x > 0]) / len(df)
         temppressision = len([x for x in rel_score if x > 0]) / len(rel_score)
         print("For topicid:" + str(i) + " the score of found paper is: " + str(score))
-        print("Pressision@k: " + str(temppressision))
-        print("Recall@k: " + str(temprecall))
-        print("The nDCG@10 score for this search is " + str(ndcg_score) + ".")
+        print(f"Pressision@{k}: " + str(temppressision))
+        print(f"Recall@{k}: " + str(temprecall))
+        print(f"The nDCG@{k} score for this search is " + str(ndcg_score) + ".")
         print("")
         counter = 0
         goodhitcounter = 0
@@ -163,9 +169,9 @@ def baseline(newinputs, se):
 
         papers.clear()
 
-    print("\nThe average nDCG@10 score is " + str(sum(nDCG_scores) / len(nDCG_scores)) + ".")
-    print("The average precision@k score is " + str(sum(pressision) / len(pressision)) + ".")
-    print("The average recall@k score is " + str(sum(recall) / len(recall)) + ".")
+    print(f"\nThe average nDCG@{k} score is " + str(sum(nDCG_scores) / len(nDCG_scores)) + ".")
+    print(f"The average precision@{k} score is " + str(sum(pressision) / len(pressision)) + ".")
+    print(f"The average recall@{k} score is " + str(sum(recall) / len(recall)) + ".")
 
 
 def newtest(newinputs, se, **kwargs):
@@ -191,13 +197,14 @@ def newtest(newinputs, se, **kwargs):
             response = se.title_search(j)
             ids.append(response["hits"]["hits"][0]["_id"])
             papers.append(response["hits"]["hits"][0])
-        kq = se.select_keyquerie(papers, final_kws=kwargs["final_kws"])
+        kq, option = se.select_keyquerie(papers, final_kws=kwargs["num_keywords"])
         if kq:
             if isinstance(kq, tuple):
-                score_this = se.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=10)["hits"]["hits"]
+                score_this = se.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=kwargs["k"])["hits"]["hits"]
             else:
-                score_this = se.normal_search_exclude_ids(kq, ids=ids, size=10)["hits"]["hits"]
+                score_this = se.normal_search_exclude_ids(kq, ids=ids, size=kwargs["k"])["hits"]["hits"]
         else:
+            option = 4
             score_this = se.option4(papers)
             # recall.append(0)
             # precision.append(0)
@@ -206,7 +213,7 @@ def newtest(newinputs, se, **kwargs):
         score = 0
 
         df = evaluationcsv[(evaluationcsv['topicid'] == i)]
-        for hit in score_this[:10]:
+        for hit in score_this[:kwargs["k"]]:
             found = False
             for row in df['title']:
                 if hit["_source"]["title"] == row:
@@ -236,26 +243,29 @@ def newtest(newinputs, se, **kwargs):
         recall_t = len([x for x in rel_score if x > 0]) / len(df)
         precision_t = len([x for x in rel_score if x > 0])/len(rel_score)
         print("For topicid:" + str(i) + " the score of found paper is: " + str(score))
-        print("Precision@k: " + str(precision_t))
-        print("Recall@k: " + str(recall_t))
-        print("The nDCG@10 score for this search is " + str(ndcg_score) + ".")
+        print(f"The nDCG@{kwargs['k']} score for this search is " + str(ndcg_score) + ".")
+        print(f"Precision@{kwargs['k']}: " + str(precision_t))
+        print(f"Recall@{kwargs['k']}: " + str(recall_t))
         counter = 0
         goodhitcounter = 0
         recall.append(recall_t)
         precision.append(precision_t)
 
-        topic = {"score": score, "precision": precision_t, "recall": recall_t, "ndcg@10": ndcg_score}
+        topic = {"option": option, "score": score, f"precision": precision_t, f"recall": recall_t, f"ndcg": ndcg_score}
         ev_json["topics"][i] = topic
 
         papers.clear()
 
-    ev_json["stats"]["avg_ndcg@10"] = sum(nDCG_scores)/len(nDCG_scores)
+    ev_json["stats"]["avg_ndcg"] = sum(nDCG_scores)/len(nDCG_scores)
     ev_json["stats"]["avg_precision"] = sum(precision)/len(precision)
     ev_json["stats"]["avg_recall"] = sum(recall)/len(recall)
+    ev_json["stats"]["options_count"] = Counter((topic["option"] for (topic_n, topic) in ev_json["topics"].items()))
+    ev_json["stats"]["k"] = kwargs["k"]
 
-    print("\nThe average nDCG@10 score is " + str(sum(nDCG_scores)/len(nDCG_scores)) + ".")
-    print("The average precision@k score is " + str(sum(precision)/len(precision)) + ".")
-    print("The average recall@k score is " + str(sum(recall)/len(recall)) + ".")
+
+    print(f"\nThe average nDCG@{kwargs['k']} score is {ev_json['stats']['avg_ndcg']}.")
+    print(f"The average precision@{kwargs['k']} score is {ev_json['stats']['avg_precision']}.")
+    print(f"The average recall@{kwargs['k']} score is {ev_json['stats']['avg_recall']}.")
 
     return ev_json
 
@@ -312,28 +322,39 @@ def oldtest(queryinputs, se):
 
 
 def start(**kwargs):
-    ev_json = evaluate(**kwargs)
-    with open("evaluation/" + "_".join(str(v) for k, v in standard_param.items() if k != "new_index"), "w") as fp:
-        json.dump(obj=ev_json, fp=fp)
-    print(str(ev_json))
+    filepath = f"evaluation/{'_'.join(str(v) for k, v in kwargs.items() if k != 'new_index')}"
+    if not glob.glob(filepath.replace(kwargs['buchstabe'], '*')):
+        print(f"{filepath.replace(kwargs['buchstabe'] + '_', '')} does not exist")
+        ev_json = evaluate(**kwargs)
+        if ev_json:
+            with open(filepath, "w") as fp:
+                json.dump(obj=ev_json, fp=fp)
+            print(str(ev_json))
+    else:
+        print(f"{filepath.replace(kwargs['buchstabe'] + '_', '')} exists already")
+
+
+def main():
+    buchstabe = datetime.today().strftime('%Y%m%d')
+    new_index = True
+    k = 10
+
+    num_keywordss = (5, 9, 11)
+    min_ranks = (10, 50, 100, 10000)
+    candidate_poss = (('NOUN', 'PROPN'), ('NOUN', 'PROPN', 'ADJ', 'VERB'))
+
+    params = {"buchstabe": buchstabe, "new_index": new_index, "k": k}
+    for num_keywords in num_keywordss:
+        params["num_keywords"] = num_keywords
+        for min_rank in min_ranks:
+            params["min_rank"] = min_rank
+            for candidate_pos in candidate_poss:
+                params["candidate_pos"] = candidate_pos
+                try:
+                    start(**params)
+                except Exception as e:
+                    print(e)
 
 
 if __name__ == '__main__':
-    buchstabe = "q"
-    standard_param = {"buchstabe": buchstabe, "new_index": True, "num_keywords": 9, "title_boost": 1, "min_rank": 50, "final_kws": 9, }
-    # start(**standard_param)
-    # standard_param["final_kws"] = 13
-    # standard_param["new_index"] = False
-    # start(**standard_param)
-    # standard_param["final_kws"] = 9
-    # standard_param["new_index"] = True
-    # standard_param["title_boost"] = 2
-    # start(**standard_param)
-    # standard_param["title_boost"] = 1
-    # standard_param["min_rank"] = 20
-    # start(**standard_param)
-    # standard_param["min_rank"] = 100
-    # start(**standard_param)
-    # standard_param["min_rank"] = 50
-    # standard_param["num_keywords"] = 11
-    start(**standard_param)
+    main()
