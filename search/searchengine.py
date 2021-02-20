@@ -284,8 +284,19 @@ class Searchengine:
             if ask == 'n':
                 break
         if papers:
-            print(papers)
-            print(self.select_keyquerie(papers))
+            print("\n##################### Searchresult #########################")
+            ids = list({paper["_id"] for paper in papers})
+            kq = self.select_keyquerie(papers)
+            if isinstance(kq, tuple):
+                print("Selected KQ: " + " ".join(kq[0]) + "\n")
+                result = self.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=10)["hits"]["hits"]
+            else:
+                print("Selected KQ: " + kq + "\n")
+                result = self.normal_search_exclude_ids(kq, ids=ids, size=10)["hits"]["hits"]
+            i = 0
+            for hit in result:
+                print(str(i) + " " + hit["_source"]["title"] + " \nwith score: " + str(hit["_score"])+ "\n")
+                i += 1
 
     def fill_documents(self, path):
         docs = self.readJSON(path)
