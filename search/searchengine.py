@@ -286,12 +286,12 @@ class Searchengine:
         if papers:
             print("\n##################### Searchresult #########################")
             ids = list({paper["_id"] for paper in papers})
-            kq = self.select_keyquerie(papers)
+            kq, _ = self.select_keyquerie(papers)
             if isinstance(kq, tuple):
                 print("Selected KQ: " + " ".join(kq[0]) + "\n")
                 result = self.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=10)["hits"]["hits"]
             else:
-                print("Selected KQ: " + kq + "\n")
+                print("Selected KQ: " + str(kq) + "\n")
                 result = self.normal_search_exclude_ids(kq, ids=ids, size=10)["hits"]["hits"]
             i = 0
             for hit in result:

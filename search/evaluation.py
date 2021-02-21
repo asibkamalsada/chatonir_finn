@@ -285,7 +285,7 @@ def oldtest(queryinputs, se):
             response = se.title_search(j)
             ids.append(response["hits"]["hits"][0]["_id"])
             papers.append(response["hits"]["hits"][0])
-        kq = se.select_keyquerie(papers)
+        kq, _ = se.select_keyquerie(papers)
         score = 0
         if isinstance(kq, tuple):
             score_this = se.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=10)
