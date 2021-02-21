@@ -1,6 +1,8 @@
 import sys
 import time
+from collections import Counter
 from functools import reduce
+from math import ceil
 
 import textrank
 from elasticsearch import Elasticsearch
@@ -14,14 +16,22 @@ class Keyqueries:
 
         self.INDEX_NAME = "paper"
 
-    def extract_keywords_op5(self, seeds, num_keywords=9):
+    def extract_keywords_kqc(self, seeds, num_keywords=9, candidate_pos=('NOUN', 'PROPN')):
+        kw_list = []
+        for seed in seeds:
+            seed["_source"]["keywords"] = self.extract_keywords(seed, num_keywords=num_keywords, candidate_pos=candidate_pos)
+            kw_list.extend(seed["_source"]["keywords"].keys())
+        common_kws = [k for (k, v) in Counter(kw_list).items() if v == len(seeds)]
 
-        text = "\n".join(f'{seed["_source"].get("abstract", "")}\n{seed["_source"].get("title", "")}\n{seed["_source"].get("fulltext", "")}' for seed in seeds)
+        if len(common_kws) >= num_keywords:
+            return common_kws[:num_keywords]
+        else:
+            n_per_seed = ceil((num_keywords - len(common_kws)) / len(seeds))
+            for seed in seeds:
+                d = [(k, v) for (k, v) in seed["_source"]["keywords"].items() if k not in common_kws]
+                common_kws.extend([e[0] for e in sorted(d, key=lambda x: x[1], reverse=True)[:n_per_seed]])
 
-        self.extractor.analyze(text, candidate_pos=['NOUN', 'PROPN', 'ADJ', 'VERB'], window_size=4, lower=True)
-        keywords_dict = self.extractor.get_keywords(num_keywords)
-
-        return keywords_dict
+        return common_kws
 
     def extract_keywords(self, seed, num_keywords=9, candidate_pos=('NOUN', 'PROPN'), analyzer=None):
         if not analyzer:
@@ -83,8 +93,10 @@ class Keyqueries:
                     yield qws, seed_scores
 
     def best_kq(self, _ids, keywords, min_rank=50):
-        kqs = {sum(seed_scores.values()): (kq, seed_scores) for kq, seed_scores in self.multi_kq(_ids=_ids, keywords=keywords, min_rank=min_rank)}
-        return kqs[max(kqs)]
+        kqs = list(self.multi_kq(_ids=_ids, keywords=keywords, min_rank=min_rank))
+        kqs = sorted(kqs, key=lambda x: (len(x[1]), sum(x[1].values()),), reverse=True)
+        if kqs:
+            return kqs[0]
 
 
 def main():
