@@ -82,8 +82,8 @@ def evaluate(new_index=False, num_keywords=9, min_rank=50, buchstabe=None, k=10,
         se.index_data(se.readJSON('json/noise9998.json'))
         # se.fill_documents('json/abstracts.json')
         # se.fill_documents('json/fulltexts.json')
-    # read_kq = se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, min_rank=min_rank, candidate_pos=candidate_pos)
-    read_kq = True
+    read_kq = se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, min_rank=min_rank, candidate_pos=candidate_pos)
+    # read_kq = True
     if read_kq:
         se.es_client.indices.refresh(se.INDEX_NAME)
         ev_json = newtest(newinputs, se, num_keywords=num_keywords, min_rank=min_rank, k=k, candidate_pos=candidate_pos)
@@ -204,8 +204,8 @@ def newtest(newinputs, se, **kwargs):
             response = se.title_search(j)
             ids.append(response["hits"]["hits"][0]["_id"])
             papers.append(response["hits"]["hits"][0])
-        # kq, option = se.select_keyquerie(papers, final_kws=kwargs["num_keywords"])
-        kq, option = se.kqc(papers, num_keywords=kwargs["num_keywords"], min_rank=kwargs["min_rank"], candidate_pos=kwargs["candidate_pos"])
+        kq, option = se.select_keyquerie(papers, final_kws=kwargs["num_keywords"])
+        # kq, option = se.kqc(papers, num_keywords=kwargs["num_keywords"], min_rank=kwargs["min_rank"], candidate_pos=kwargs["candidate_pos"])
         if kq:
             if isinstance(kq, tuple):
                 score_this = se.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=kwargs["k"])["hits"]["hits"]
