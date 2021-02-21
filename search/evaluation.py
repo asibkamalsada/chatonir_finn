@@ -82,10 +82,11 @@ def evaluate(new_index=False, num_keywords=9, min_rank=50, buchstabe=None, k=10,
         se.index_data(se.readJSON('json/noise9998.json'))
         # se.fill_documents('json/abstracts.json')
         # se.fill_documents('json/fulltexts.json')
-    read_kq = se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, min_rank=min_rank, candidate_pos=candidate_pos)
+    # read_kq = se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, min_rank=min_rank, candidate_pos=candidate_pos)
+    read_kq = True
     if read_kq:
         se.es_client.indices.refresh(se.INDEX_NAME)
-        ev_json = newtest(newinputs, se, num_keywords=num_keywords, min_rank=min_rank, k=k)
+        ev_json = newtest(newinputs, se, num_keywords=num_keywords, min_rank=min_rank, k=k, candidate_pos=candidate_pos)
         if bsln_b:
             b_ndcg, b_prec, b_rec = baseline(newinputs, se, k=k)
             ev_json["baseline"] = {"avg_ndcg": b_ndcg, "avg_precision": b_prec, "avg_recall": b_rec}
@@ -203,7 +204,8 @@ def newtest(newinputs, se, **kwargs):
             response = se.title_search(j)
             ids.append(response["hits"]["hits"][0]["_id"])
             papers.append(response["hits"]["hits"][0])
-        kq, option = se.select_keyquerie(papers, final_kws=kwargs["num_keywords"])
+        # kq, option = se.select_keyquerie(papers, final_kws=kwargs["num_keywords"])
+        kq, option = se.kqc(papers, num_keywords=kwargs["num_keywords"], min_rank=kwargs["min_rank"], candidate_pos=kwargs["candidate_pos"])
         if kq:
             if isinstance(kq, tuple):
                 score_this = se.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=kwargs["k"])["hits"]["hits"]
@@ -329,24 +331,24 @@ def oldtest(queryinputs, se):
 
 def start(**kwargs):
     filepath = f"evaluation/{'_'.join(str(v) for k, v in kwargs.items() if k not in ('new_index', 'bsln_b'))}"
-    if not glob.glob(filepath.replace(kwargs['buchstabe'], '*')):
-        print(f"{filepath.replace(kwargs['buchstabe'], '*')} does not exist")
+    if not glob.glob(filepath):
+        print(f"{filepath} does not exist")
         ev_json = evaluate(**kwargs)
         if ev_json:
             with open(filepath, "w") as fp:
                 json.dump(obj=ev_json, fp=fp)
             print(str(ev_json))
     else:
-        print(f"{filepath.replace(kwargs['buchstabe'], '*')} exists already")
+        print(f"{filepath} exists already")
 
 
 def full_eval():
-    buchstabe = datetime.today().strftime('%Y%m%d')
+    buchstabe = "kqc/" + datetime.today().strftime('%Y%m%d')
     new_index = True
     k = 10
 
     num_keywordss = (5, 9, 11)
-    min_ranks = (10, 50, 100, 10000)
+    min_ranks = (10, 50, 100)
     candidate_poss = (('NOUN', 'PROPN'), ('NOUN', 'PROPN', 'ADJ', 'VERB'))
 
     params = {"buchstabe": buchstabe, "new_index": new_index, "k": k}
@@ -363,15 +365,15 @@ def full_eval():
 
 
 def k_eval():
-    for k in (20, 50):
-        start(buchstabe="changedk/",
+    for k in (20, 50, 100, 10000):
+        start(buchstabe="kqc/",
               new_index=True,
               k=k,
               num_keywords=9,
               min_rank=10,
               candidate_pos=('NOUN', 'PROPN', 'ADJ', 'VERB'),
-              bsln_b=True)
+              bsln_b=False)
 
 
 if __name__ == '__main__':
-    k_eval()
+    full_eval()

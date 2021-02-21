@@ -476,6 +476,9 @@ class Searchengine:
                     candidates.remove(temp)
             return selected, 1
 
+        # print("\n---------------------- dcacok --------------------------")
+        # return self.dontcareaboutcoverageofkeyqueries(papers), "dcacok"
+
         solutions = self.option2(papers)
         if solutions:
             print("\n---------------------- Option 2 ------------------------")
@@ -547,7 +550,7 @@ class Searchengine:
             return "Those paper are not compatible for the keyquerie search. Sorry."
     '''
 
-    def dontcareaboutcoverageofkeyqueries(self, docs_p):
+    def dontcareaboutcoverageofkeyqueries(self, docs_p, top_kqs=5):
         kqs = dict()
         for doc in docs_p:
             for kq_str, score in doc["_source"].get("keyqueries", dict()).items():
@@ -620,12 +623,12 @@ class Searchengine:
         #                 thislist.remove(item)
         return thislist
 
-    def option5(self, papers, num_keywords=9):
+    def kqc(self, papers, num_keywords=9, min_rank=50, candidate_pos=('NOUN', 'PROPN')):
         print("\n---------------------- Option 5 ------------------------")
 
         k = keyqueries.Keyqueries()
         ids = {paper["_id"] for paper in papers}
-        kws = k.extract_keywords_op5(papers, num_keywords=num_keywords)
-        kq = k.best_kq(_ids=ids, keywords=kws)
+        kws = k.extract_keywords_kqc(papers, num_keywords=num_keywords, candidate_pos=candidate_pos)
+        kq = k.best_kq(_ids=ids, keywords=kws, min_rank=min_rank)
 
-        return kq
+        return kq, "kqc"

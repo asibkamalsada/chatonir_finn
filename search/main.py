@@ -8,7 +8,7 @@ import pandas as pd
 def main():
     se = searchengine.Searchengine()
 
-    se.start()
+    se.debug_print()
 
 
 def creating_new_data():
