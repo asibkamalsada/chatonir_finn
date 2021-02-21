@@ -333,7 +333,7 @@ class Searchengine:
                     try_n += 1
             else:
                 print("could not read that stuff in")
-                return False
+                raise Exception()
         else:
             print("no keyqueries calculated")
         return True
@@ -444,6 +444,8 @@ class Searchengine:
                 json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
 
     def select_keyquerie(self, papers, final_kws=9, min_rank=50):
+        # return self.dontcareaboutcoverageofkeyqueries(papers), "dcacok-algorithm"
+
         # return self.option5(papers, num_keywords=final_kws)
 
         kqss_v = [paper["_source"].get("keyqueries") for paper in papers if paper["_source"].get("keyqueries")]
@@ -548,7 +550,7 @@ class Searchengine:
     def dontcareaboutcoverageofkeyqueries(self, docs_p):
         kqs = dict()
         for doc in docs_p:
-            for kq_str, score in doc["_source"].get("keyqueries", (None, None)):
+            for kq_str, score in doc["_source"].get("keyqueries", dict()).items():
                 if kq_str and score:
                     kq = frozenset(kq_str.split())
                     kqs[kq] = kqs.get(kq, 0.0) + score

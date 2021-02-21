@@ -13,7 +13,7 @@ import pandas as pd
 import itertools
 
 
-def evaluate(new_index=False, num_keywords=9, min_rank=50, buchstabe=None, k=10, candidate_pos=('NOUN', 'PROPN')):
+def evaluate(new_index=False, num_keywords=9, min_rank=50, buchstabe=None, k=10, candidate_pos=('NOUN', 'PROPN'), bsln_b=False):
     queryinputs = {tuple(["Halo: a technique for visualizing off-screen objects", "Wedge: clutter-free visualization of off-screen locations"]) : ["Visualizing references to off-screen content on mobile devices: A comparison of Arrows, Wedge, and Overview+Detail","Visualizing locations of off-screen objects on mobile devices: a comparative evaluation of three approaches"],
                    tuple(["Towards optimum query segmentation: in doubt without", "Query segmentation based on eigenspace similarity", "Unsupervised query segmentation using click data: preliminary results"]): ["An IR-based evaluation framework for web search query segmentation","Query segmentation using conditional random fields."],
                    tuple(["On the effects of dimensionality reduction on high dimensional similarity search"]) : ["Automatic subspace clustering of high dimensional data for data mining applications","Can shared-neighbor distances defeat the curse of dimensionality?", "Density-based indexing for approximate nearest-neighbor queries"],
@@ -85,11 +85,11 @@ def evaluate(new_index=False, num_keywords=9, min_rank=50, buchstabe=None, k=10,
     read_kq = se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, min_rank=min_rank, candidate_pos=candidate_pos)
     if read_kq:
         se.es_client.indices.refresh(se.INDEX_NAME)
-
-        # baseline(newinputs, se, k=k)
-        # newtest(newinputs, se)
-
-        return newtest(newinputs, se, num_keywords=num_keywords, min_rank=min_rank, k=k)
+        ev_json = newtest(newinputs, se, num_keywords=num_keywords, min_rank=min_rank, k=k)
+        if bsln_b:
+            b_ndcg, b_prec, b_rec = baseline(newinputs, se, k=k)
+            ev_json["baseline"] = {"avg_ndcg": b_ndcg, "avg_precision": b_prec, "avg_recall": b_rec}
+        return ev_json
 
 
 def baseline(newinputs, se, k=10):
@@ -134,7 +134,7 @@ def baseline(newinputs, se, k=10):
                     counter += 1
                     score += hit["_score"]
                     lel = df[df['title'] == row]['ranking']
-                    if (int(lel) > 0):
+                    if int(lel) > 0:
                         goodhitcounter += 1
                     rel_score.append(int(lel))
                     found = True
@@ -169,9 +169,15 @@ def baseline(newinputs, se, k=10):
 
         papers.clear()
 
-    print(f"\nThe average nDCG@{k} score is " + str(sum(nDCG_scores) / len(nDCG_scores)) + ".")
-    print(f"The average precision@{k} score is " + str(sum(pressision) / len(pressision)) + ".")
-    print(f"The average recall@{k} score is " + str(sum(recall) / len(recall)) + ".")
+    avg_ndcg = sum(nDCG_scores) / len(nDCG_scores)
+    avg_precision = sum(pressision) / len(pressision)
+    avg_recall = sum(recall) / len(recall)
+
+    print(f"\nThe average nDCG@{k} score is " + str(avg_ndcg) + ".")
+    print(f"The average precision@{k} score is " + str(avg_precision) + ".")
+    print(f"The average recall@{k} score is " + str(avg_recall) + ".")
+
+    return avg_ndcg, avg_precision, avg_recall
 
 
 def newtest(newinputs, se, **kwargs):
@@ -251,7 +257,7 @@ def newtest(newinputs, se, **kwargs):
         recall.append(recall_t)
         precision.append(precision_t)
 
-        topic = {"option": option, "score": score, f"precision": precision_t, f"recall": recall_t, f"ndcg": ndcg_score}
+        topic = {"option": option, "score": score, "precision": precision_t, "recall": recall_t, "ndcg": ndcg_score}
         ev_json["topics"][i] = topic
 
         papers.clear()
@@ -322,19 +328,19 @@ def oldtest(queryinputs, se):
 
 
 def start(**kwargs):
-    filepath = f"evaluation/{'_'.join(str(v) for k, v in kwargs.items() if k != 'new_index')}"
+    filepath = f"evaluation/{'_'.join(str(v) for k, v in kwargs.items() if k not in ('new_index', 'bsln_b'))}"
     if not glob.glob(filepath.replace(kwargs['buchstabe'], '*')):
-        print(f"{filepath.replace(kwargs['buchstabe'] + '_', '')} does not exist")
+        print(f"{filepath.replace(kwargs['buchstabe'], '*')} does not exist")
         ev_json = evaluate(**kwargs)
         if ev_json:
             with open(filepath, "w") as fp:
                 json.dump(obj=ev_json, fp=fp)
             print(str(ev_json))
     else:
-        print(f"{filepath.replace(kwargs['buchstabe'] + '_', '')} exists already")
+        print(f"{filepath.replace(kwargs['buchstabe'], '*')} exists already")
 
 
-def main():
+def full_eval():
     buchstabe = datetime.today().strftime('%Y%m%d')
     new_index = True
     k = 10
@@ -356,5 +362,16 @@ def main():
                     print(e)
 
 
+def k_eval():
+    for k in (20, 50):
+        start(buchstabe="changedk/",
+              new_index=True,
+              k=k,
+              num_keywords=9,
+              min_rank=10,
+              candidate_pos=('NOUN', 'PROPN', 'ADJ', 'VERB'),
+              bsln_b=True)
+
+
 if __name__ == '__main__':
-    main()
+    k_eval()
