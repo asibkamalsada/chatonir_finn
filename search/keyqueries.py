@@ -1,6 +1,5 @@
-import sys
-import time
-from functools import reduce
+from collections import Counter
+from math import ceil
 
 import textrank
 from elasticsearch import Elasticsearch
@@ -8,46 +7,73 @@ from elasticsearch import Elasticsearch
 
 class Keyqueries:
     def __init__(self):
+
         self.es = Elasticsearch()
         self.extractor = textrank.TextRank4Keyword()
 
-        self.MAX_SEARCH = 10000
-        self.MIN_RANK = 50
-        self.TITLE_BOOST = 2
         self.INDEX_NAME = "paper"
-        self.MAX_DEPTH = sys.maxsize
 
-    def extract_keywords(self, seed):
+    def extract_keywords_kqc(self, seeds, num_keywords=9, candidate_pos=('NOUN', 'PROPN')):
+        kw_list = []
+        for seed in seeds:
+            seed["_source"]["keywords"] = self.extract_keywords(seed, num_keywords=num_keywords, candidate_pos=candidate_pos)
+            kw_list.extend(seed["_source"]["keywords"].keys())
+        common_kws = [k for (k, v) in Counter(kw_list).items() if v == len(seeds)]
+
+        if len(common_kws) >= num_keywords:
+            return common_kws[:num_keywords]
+        else:
+            n_per_seed = ceil((num_keywords - len(common_kws)) / len(seeds))
+            for seed in seeds:
+                d = [(k, v) for (k, v) in seed["_source"]["keywords"].items() if k not in common_kws]
+                common_kws.extend([e[0] for e in sorted(d, key=lambda x: x[1], reverse=True)[:n_per_seed]])
+
+        return common_kws
+
+    def extract_keywords(self, seed, num_keywords=9, candidate_pos=('NOUN', 'PROPN'), analyzer=None):
+        if not analyzer:
+            analyzer = {"tokenizer": "standard", "filter": ["lowercase", "porter_stem"]}
         source = seed["_source"]
-        self.extractor.analyze(f'{source.get("abstract", "")}\n{source.get("title", "")}\n{source.get("fulltext", "")}',
-                               candidate_pos=['NOUN', 'PROPN'], window_size=4, lower=True)
-        keywords_dict = self.extractor.get_keywords(9)
+        plaintexts = f'{source.get("abstract", "")}\n{source.get("title", "")}\n{source.get("fulltext", "")}'
+        body = analyzer.copy()
+        body["text"] = plaintexts
+        analyzed = self.es.indices.analyze(index=self.INDEX_NAME, body=body)
+        stems = [token['token'] for token in analyzed["tokens"]]
+        stemmed_plaintexts = " ".join(stems)
+        self.extractor.analyze(stemmed_plaintexts, candidate_pos=candidate_pos, window_size=4, lower=True)
+        keywords_dict = self.extractor.get_keywords(num_keywords)
+        print(f"{source.get('title', '')}\n{keywords_dict.keys()}\n")
+        # keywords_dict = dict((kw.lower(), i) for (i, kw) in enumerate(source.get("title").split()))
         # print(keywords_dict)
         return keywords_dict
 
-    def single_kq(self, _id, keywords):
-        for qws, seed_scores in self.multi_kq([_id], keywords):
+    def single_kq(self, _id, keywords, min_rank=50):
+        for qws, seed_scores in self.multi_kq([_id], keywords, min_rank=min_rank):
+            # print(qws, seed_scores)
             yield qws, seed_scores[_id]
 
-    def multi_kq(self, _ids, keywords):
+    def multi_kq(self, _ids, keywords, min_rank=50, title_boost=1, abstract_boost=1):
         if not keywords:
             return
         if isinstance(keywords, dict):
             keywords = [*keywords]
+        # TODO replace list comprehension with generator in order to save RAM
         querywordss = [tuple(keywords[index] for index in range(0, len(keywords)) if 1 << index & bitcode) for bitcode
                        in range(0, 2 ** len(keywords))]
-        chunk_size = 2 ** (len(keywords) - 1)  # this actually means chunk_size = half of amount of possible keyqueries
+        # this actually means chunk_size = amount of possible keyqueries or 10000
+        chunk_size = min(2 ** len(keywords), 10000)
         query_header = {"index": self.INDEX_NAME}
 
+        # TODO when querywordss is replaced by a generator, use the correct slice operator here
         for chunk in [querywordss[x:x + chunk_size] for x in range(0, len(querywordss), chunk_size)]:
             query = []
             for qws in chunk:
                 query_body = {
-                    "size": self.MIN_RANK,
+                    "size": min_rank,
                     "query": {
                         "multi_match": {
                             "query": " ".join(qws),
-                            "fields": [f"title^{self.TITLE_BOOST}", "abstract", "fulltext"],
+                            "fields": [f"title^{title_boost}", f"abstract^{abstract_boost}", "fulltext"],
                             "operator": "and"
                         },
                     },
@@ -65,93 +91,17 @@ class Keyqueries:
                 if seed_scores:
                     yield qws, seed_scores
 
-    def best_kq(self, _ids, keywords):
-        kqs = {sum(seed_scores.values()): (kq, seed_scores) for kq, seed_scores in self.multi_kq(_ids, keywords)}
-        return kqs[max(kqs)]
+    def best_kq(self, _ids, keywords, min_rank=50):
+        kqs = list(self.multi_kq(_ids=_ids, keywords=keywords, min_rank=min_rank))
+        kqs = sorted(kqs, key=lambda x: (len(x[1]), sum(x[1].values()),), reverse=True)
+        if kqs:
+            return kqs[0]
 
 
 def main():
     k = Keyqueries()
     print(list(k.single_kq(_id=None, keywords=[])))
 
-
-"""    
-    bitcodes = range(0, 181)
-    print(bitcodes)
-    chunk_size = 10
-    for chunk in [bitcodes[x:x + chunk_size] for x in range(0, len(bitcodes), chunk_size)]:
-        for bitcode in chunk:
-            print(bitcode)
-
-    es = Elasticsearch()
-    index_name = 'paper'
-    hit1 = es.search(index=index_name, body={"query": {"match": {
-        "title": "Incorporating Historical Test Case Performance Data and Resource Constraints into Test Case Prioritization."}}})[
-        "hits"]["hits"][0]
-    k = Keyqueries()
-
-    startx = time.time()
-
-    print(dict(k.single_kq(hit1["_id"], k.extract_keywords(hit1))))
-
-    print(time.time() - startx)
-
-    start152 = time.time()
-
-    print(time.time() - start152)
-
-
-    bitcodes = range(0, 181)
-    print(bitcodes)
-    chunk_size = 10
-    for chunk in [bitcodes[x:x + chunk_size] for x in range(0, len(bitcodes), chunk_size)]:
-        for bitcode in chunk:
-            print(bitcode)
-
-    hit2 = es.search(index=index_name,
-                     body={"query": {"match": {"title": "The test data challenge for database-driven applications."}}})[
-        "hits"]["hits"][0]
-    hit3 = es.search(index=index_name,
-                     body={"query": {"match": {"title": "Strong higher order mutation-based test data generation."}}})[
-        "hits"]["hits"][0]
-    hit4 = es.search(index=index_name,
-                     body={"query": {"match": {"title": "Efficiently monitoring data-flow test coverage."}}})["hits"][
-        "hits"][0]
-    hit5 = es.search(index=index_name,
-                     body={"query": {"match": {
-                         "title": "Research of Survival-Time-Based Dynamic Adaptive Replica Allocation Algorithm in Mobile Ad Hoc Networks."}}})[
-        "hits"][
-        "hits"][0]
-
-    hits = [hit1, hit2, hit3, hit4, hit5]
-
-    k = Keyqueries()
-
-    # print(k.smolpp(hit1))
-    start0 = time.time()
-
-    print(k.parallel_kq(hit1))
-    # print(k.full_keyquery(hit1))
-
-    print(time.time() - start0)
-
-
-
-
-    start1 = time.time()
-
-    with Pool() as pool:
-        print(pool.map(full_keyquery, hits))
-
-    print(f"v1 took {time.time() - start1}")
-
-    start2 = time.time()
-
-    for hit in hits:
-        print(full_keyquery2(hit))
-
-    print(f"v2 took {time.time() - start2}")
-"""
 
 if __name__ == '__main__':
     main()

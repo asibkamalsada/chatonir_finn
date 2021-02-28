@@ -2,6 +2,7 @@ name: chatonir_finn
 channels:
   - conda-forge
   - defaults
+  - intel
 dependencies:
 - python=3.8
 - elasticsearch=7.10.0
@@ -10,3 +11,5 @@ dependencies:
 - spacy=2.3.5
 - spacy-model-en_core_web_sm=2
 - nltk=3.5
+- pandas
+- scikit-learn
