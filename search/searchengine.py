@@ -278,7 +278,7 @@ class Searchengine:
                     print("Wrong Input, pls try again!")
 
             print('currently selected papers: [\n    {}\n]'.format(
-                "\n    ".join(str(paper['_source']) for paper in papers)))
+                "\n    ".join(str(paper['_source']["title"]) for paper in papers)))
 
             ask = input("Do you want to add another paper [Y/n]?")
             if ask == 'n':
@@ -289,10 +289,10 @@ class Searchengine:
             kq, _ = self.select_keyquerie(papers)
             if isinstance(kq, tuple):
                 print("Selected KQ: " + " ".join(kq[0]) + "\n")
-                result = self.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=10)["hits"]["hits"]
+                result = self.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=20)["hits"]["hits"]
             else:
                 print("Selected KQ: " + str(kq) + "\n")
-                result = self.normal_search_exclude_ids(kq, ids=ids, size=10)["hits"]["hits"]
+                result = self.normal_search_exclude_ids(kq, ids=ids, size=20)["hits"]["hits"]
             i = 0
             for hit in result:
                 print(str(i) + " " + hit["_source"]["title"] + " \nwith score: " + str(hit["_score"])+ "\n")
