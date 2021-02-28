@@ -250,7 +250,7 @@ class Searchengine:
 
         self.chunk_update_field(gen)
 
-    def start(self):
+    def start(self, size=20):
         papers = []
         while True:
             query = input("Enter the paper you want to keyquerie: (empty input to cancel)")
@@ -291,10 +291,10 @@ class Searchengine:
             kq, _ = self.select_keyquerie(papers)
             if isinstance(kq, tuple):
                 print("Selected KQ: " + " ".join(kq[0]) + "\n")
-                result = self.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=20)["hits"]["hits"]
+                result = self.normal_search_exclude_ids(" ".join(kq[0]), ids=ids, size=size)["hits"]["hits"]
             else:
                 print("Selected KQ: " + str(kq) + "\n")
-                result = self.normal_search_exclude_ids(kq, ids=ids, size=20)["hits"]["hits"]
+                result = self.normal_search_exclude_ids(kq, ids=ids, size=size)["hits"]["hits"]
             i = 0
             for hit in result:
                 print(str(i) + " " + hit["_source"]["title"] + " \nwith score: " + str(hit["_score"])+ "\n")
