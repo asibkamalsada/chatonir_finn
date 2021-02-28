@@ -25,4 +25,4 @@ und aktiviert um unser Programm starten zu können:
 
 Das Script index.py wird automatische den ganzen Corpus der DBLP Daten indezieren. Da hierfür die Keyqueries vorberechnet
 werden kann diese einige Zeit dauern. Falls die Suchmaschine auf einem kleineren Datensatz ausprobiert werden soll, muss dieser 
-bei ``` se.index_data() ``` in main.py geändert werden. 
+bei ``` se.index_data() ``` in index.py geändert werden. 
