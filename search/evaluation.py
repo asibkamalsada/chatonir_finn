@@ -1,13 +1,12 @@
 import glob
 import json
-import os
-import sys
+
 from collections import Counter
 from datetime import datetime
 
 import searchengine
-import time
-from sklearn.metrics import ndcg_score, dcg_score
+
+from sklearn.metrics import dcg_score
 import numpy as np
 import pandas as pd
 import itertools
@@ -77,13 +76,12 @@ def evaluate(new_index=False, num_keywords=9, min_rank=50, buchstabe=None, k=10,
     se = searchengine.Searchengine()
     if new_index:
         se.create_index()
-        se.index_data(se.readJSON("json/data.json"))
+        se.index_data(searchengine.readJSON("json/data.json"))
         # se.index_data(se.readJSON("json/testdata.json"))
-        se.index_data(se.readJSON('json/noise9998.json'))
+        se.index_data(searchengine.readJSON('json/noise9998.json'))
         # se.fill_documents('json/abstracts.json')
         # se.fill_documents('json/fulltexts.json')
-    # read_kq = se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, min_rank=min_rank, candidate_pos=candidate_pos)
-    read_kq = True
+    read_kq = se.update_keyqueries_without_noise(newinputs, num_keywords=num_keywords, min_rank=min_rank, candidate_pos=candidate_pos)
     if read_kq:
         se.es_client.indices.refresh(se.INDEX_NAME)
         ev_json = newtest(newinputs, se, num_keywords=num_keywords, min_rank=min_rank, k=k, candidate_pos=candidate_pos)
@@ -342,8 +340,10 @@ def start(**kwargs):
         print(f"{filepath} exists already")
 
 
-def full_eval():
-    buchstabe = "kqc/" + datetime.today().strftime('%Y%m%d')
+def full_eval(folder=""):
+    if folder:
+        folder = folder + "/"
+    buchstabe = folder + datetime.today().strftime('%Y%m%d')
     new_index = True
     k = 10
 

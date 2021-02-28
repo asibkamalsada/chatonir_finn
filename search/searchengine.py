@@ -2,19 +2,62 @@ import itertools
 import json
 import math
 import multiprocessing
-import threading
+
 from collections import Counter
 from concurrent.futures.thread import ThreadPoolExecutor
 from io import StringIO
 from math import ceil
 from statistics import mean
-from threading import Thread
+
 
 import PyPDF2
 from elasticsearch import Elasticsearch, ElasticsearchException
 from elasticsearch.helpers import bulk
 
 import keyqueries
+
+
+def readPDF(path):
+    file = open(path, 'rb')
+    pdfReader = PyPDF2.PdfFileReader(file)
+
+    title = str(pdfReader.getDocumentInfo().title)
+    creator = str(pdfReader.getDocumentInfo().creator)
+    numOfPages = pdfReader.getNumPages()
+    concat = StringIO()
+
+    for i in range(0, numOfPages):
+        print(i)
+        pageObject = pdfReader.getPage(i)
+        concat.write(pageObject.extractText())
+    concat.getvalue().replace("\n", " ")
+    file.close()
+    return [title, creator, concat.getvalue().replace("\n", " ")]
+
+
+def readJSON_(path):
+    """
+    reads in a json with multiple top level objects
+    :param path: to the json which has multiple top level objects
+    :return: a list containing the multiple top level json objects contained in path
+    """
+    with open(path, 'r', encoding='utf8') as file:
+        return [json.loads(line) for line in file.readlines()]
+
+
+def readJSON(path):
+    """
+    reads in a json with a single top level object
+    :param path: to the json which has a single top level object
+    :return: an iterable containing the elements of the single top level json object contained in path
+    """
+    with open(path, 'r', encoding='utf8') as file:
+        return json.load(file)
+
+
+def read2lines(path):
+    with open(path, 'r', encoding='utf8') as file:
+        return file.readlines()
 
 
 def print_return(param):
@@ -25,6 +68,9 @@ def print_return(param):
 def calc_kwss_kqss(entries, num_keywords=9, min_rank=50, candidate_pos=('NOUN', 'PROPN')):
     k = keyqueries.Keyqueries()
     old_size = len(entries)
+    # the -1 workaround instead of a simple
+    #   if entry["_source"].get("keyqueries")
+    # handles the case in which keyqueries is already calculated but empty correctly
     entries = [entry for entry in entries if entry["_source"].get("keyqueries", -1) == -1]
     if entries:
         print(f"first entry: {entries[0]}\ndid not read {len(entries)} out of {old_size} possible docs in chunk... ")
@@ -35,8 +81,6 @@ def calc_kwss_kqss(entries, num_keywords=9, min_rank=50, candidate_pos=('NOUN', 
                    for (qws, score) in k.single_kq(entry["_id"], kws, min_rank=min_rank)}
             kwqss[entry["_id"]] = (kws, kqs)
         return kwqss
-        # kwss = {entry["_id"]: k.extract_keywords(entry) for entry in entries}
-        # kqss = {entry["_id"]: create_kq_dict(entry) for entry in entries}
     else:
         print(f"already read chunk of {old_size}")
 
@@ -51,35 +95,6 @@ class Searchengine:
     def __init__(self):
         self.INDEX_NAME = "paper"
         self.es_client = Elasticsearch()
-
-    def readPDF(self, path):
-        file = open(path, 'rb')
-        pdfReader = PyPDF2.PdfFileReader(file)
-
-        title = str(pdfReader.getDocumentInfo().title)
-        creator = str(pdfReader.getDocumentInfo().creator)
-        numOfPages = pdfReader.getNumPages()
-        concat = StringIO()
-
-        for i in range(0, numOfPages):
-            print(i)
-            pageObject = pdfReader.getPage(i)
-            concat.write(pageObject.extractText())
-        concat.getvalue().replace("\n", " ")
-        file.close()
-        return [title, creator, concat.getvalue().replace("\n", " ")]
-
-    def readJSON_(self, path):
-        with open(path, 'r', encoding='utf8') as file:
-            return [json.loads(line) for line in file.readlines()]
-
-    def readJSON(self, path):
-        with open(path, 'r', encoding='utf8') as file:
-            return json.load(file)
-
-    def read2lines(self, path):
-        with open(path, 'r', encoding='utf8') as file:
-            return file.readlines()
 
     def create_index(self):
         """ Creates an Elasticsearch index."""
@@ -128,26 +143,13 @@ class Searchengine:
         finally:
             return is_created
 
-    def chunk_iterate_docs(self, page_size=10000, keep_alive="12h"):
-        if page_size > 10000:
-            page_size = 10000
-        pit: dict = self.es_client.open_point_in_time(index=self.INDEX_NAME, keep_alive=keep_alive)
+    def createIndexAndIndexDocs_(self, path):
+        self.create_index()
+        self.index_data(readJSON_(path))
 
-        query = {
-            "size": page_size,
-            "sort": [{"_doc": "asc"}],
-            "pit": pit
-        }
-
-        response = self.es_client.search(body=query)
-
-        while response["hits"]["hits"]:
-            yield response["hits"]["hits"]
-            query["search_after"] = response["hits"]["hits"][-1]["sort"]
-            query["pit"]["id"] = response["pit_id"]
-            response = self.es_client.search(body=query)
-
-        self.es_client.close_point_in_time(body={"id": response["pit_id"]})
+    def createIndexAndIndexDocs(self, path):
+        self.create_index()
+        self.index_data(readJSON(path))
 
     def index_data(self, data, batch_size=10000):
         """ Indexs all the rows in data"""
@@ -156,10 +158,6 @@ class Searchengine:
             # print(f'Indexed {doc} document.')
 
         print("Done indexing!!! Wuhu")
-
-    def insert_one_data(self, doc):
-        res = self.es_client.index(index=self.INDEX_NAME, body=doc)
-        # print(res)
 
     def index_batch(self, docs):
         """ Indexes a batch of documents."""
@@ -171,14 +169,6 @@ class Searchengine:
             request["_source"] = doc
             requests.append(request)
         bulk(self.es_client, requests, refresh=True)
-
-    def createIndexAndIndexDocs_(self, path):
-        self.create_index()
-        self.index_data(self.readJSON_(path))
-
-    def createIndexAndIndexDocs(self, path):
-        self.create_index()
-        self.index_data(self.readJSON(path))
 
     def run_query_loop(self):
         """ Asks user to enter a query to search."""
@@ -248,6 +238,18 @@ class Searchengine:
         }
         return self.es_client.search(index=self.INDEX_NAME, body=search)
 
+    def fill_documents(self, path):
+        docs = readJSON(path)
+        doi_id = {hit["_source"]["doi"]: hit["_id"] for hits in self.chunk_iterate_docs() for hit in hits}
+
+        gen = ((doi_id[doc["doi"]], {
+            "abstract": doc.get("abstract"),
+            "fulltext": doc.get("fulltext"),
+            "acmId": doc.get("acmId")
+        }) for doc in docs if doc["doi"] in doi_id)
+
+        self.chunk_update_field(gen)
+
     def start(self):
         papers = []
         while True:
@@ -298,17 +300,26 @@ class Searchengine:
                 print(str(i) + " " + hit["_source"]["title"] + " \nwith score: " + str(hit["_score"])+ "\n")
                 i += 1
 
-    def fill_documents(self, path):
-        docs = self.readJSON(path)
-        doi_id = {hit["_source"]["doi"]: hit["_id"] for hits in self.chunk_iterate_docs() for hit in hits}
+    def chunk_iterate_docs(self, page_size=10000, keep_alive="12h"):
+        if page_size > 10000:
+            page_size = 10000
+        pit: dict = self.es_client.open_point_in_time(index=self.INDEX_NAME, keep_alive=keep_alive)
 
-        gen = ((doi_id[doc["doi"]], {
-            "abstract": doc.get("abstract"),
-            "fulltext": doc.get("fulltext"),
-            "acmId": doc.get("acmId")
-        }) for doc in docs if doc["doi"] in doi_id)
+        query = {
+            "size": page_size,
+            "sort": [{"_doc": "asc"}],
+            "pit": pit
+        }
 
-        self.chunk_update_field(gen)
+        response = self.es_client.search(body=query)
+
+        while response["hits"]["hits"]:
+            yield response["hits"]["hits"]
+            query["search_after"] = response["hits"]["hits"][-1]["sort"]
+            query["pit"]["id"] = response["pit_id"]
+            response = self.es_client.search(body=query)
+
+        self.es_client.close_point_in_time(body={"id": response["pit_id"]})
 
     def update_keyqueries_without_noise(self, new_inputs, num_keywords=9, min_rank=50, candidate_pos=('NOUN', 'PROPN')):
         self.es_client.indices.refresh(index=self.INDEX_NAME)
@@ -419,30 +430,6 @@ class Searchengine:
         print(f"{page_size} documents successfully read")
         # self.es_client.indices.refresh(index=self.INDEX_NAME)
 
-    def debug_print(self):
-        print("hits without kq:", len(list(hit for hits in self.chunk_iterate_docs() for hit in hits if not hit["_source"].get("keyqueries"))))
-
-    def extract_noise(self, size=5000):
-        query = {
-            "size": size,
-            "query": {
-                "function_score": {
-                    "query": {"match_all": {}},
-                    "random_score": {}
-                }
-            }
-        }
-        content = json.dumps([hit["_source"] for hit in self.es_client.search(body=query, index=self.INDEX_NAME)["hits"]["hits"]])
-        with open(f"json/noise{size}.json", "w") as file:
-            file.write(content)
-
-    def extract_json(self, search_phrase, file_name=None):
-        if not file_name:
-            file_name = f"{search_phrase}.json"
-        with open(file_name, "w") as file:
-            file.write(
-                json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
-
     def select_keyquerie(self, papers, final_kws=9, min_rank=50):
         # return self.dontcareaboutcoverageofkeyqueries(papers), "dcacok-algorithm"
 
@@ -518,37 +505,6 @@ class Searchengine:
             except TimeoutError:
                 pass
         return None, None
-
-    '''
-        if revindex.most_common(1)[0][1] > 1:
-            candidates = [k for k, v in revindex.items() if float(v) == revindex.most_common(1)[0][1]]
-            unoccourrentpaper = {}
-            for candidate in candidates:
-                unoccourrentpaper[candidate] = [paper["_source"]["title"] for paper in papers if
-                                                candidate not in paper["_source"].get("keyqueries")]
-            score = 0
-            query = ""
-            for kq in unoccourrentpaper:
-                temp = 0
-                for pap in unoccourrentpaper[kq]:
-                    query_body = {
-                        "size": 10000,
-                        "query": {
-                            "multi_match": {
-                                "query": kq,
-                                "fields": ["title", "abstract"],
-                                "operator": "and"
-                            },
-                        },
-                    }
-                    responses = self.es_client.search(body=query_body)
-                    # print(pap)
-                    # print([lel["_score"] for lel in responses["hits"]["hits"] if lel["_source"]["title"] == pap])
-                    print("--------------------------------")
-                    return revindex.most_common(1)[0][0]
-        else:
-            return "Those paper are not compatible for the keyquerie search. Sorry."
-    '''
 
     def dontcareaboutcoverageofkeyqueries(self, docs_p, top_kqs=5):
         kqs = dict()
@@ -632,3 +588,27 @@ class Searchengine:
         kq = k.best_kq(_ids=ids, keywords=kws, min_rank=min_rank)
 
         return kq, "kqc"
+
+    def debug_print(self):
+        print("hits without kq:", len(list(hit for hits in self.chunk_iterate_docs() for hit in hits if not hit["_source"].get("keyqueries"))))
+
+    def extract_noise(self, size=5000):
+        query = {
+            "size": size,
+            "query": {
+                "function_score": {
+                    "query": {"match_all": {}},
+                    "random_score": {}
+                }
+            }
+        }
+        content = json.dumps([hit["_source"] for hit in self.es_client.search(body=query, index=self.INDEX_NAME)["hits"]["hits"]])
+        with open(f"json/noise{size}.json", "w") as file:
+            file.write(content)
+
+    def extract_json(self, search_phrase, file_name=None):
+        if not file_name:
+            file_name = f"{search_phrase}.json"
+        with open(file_name, "w") as file:
+            file.write(
+                json.dumps([hit["_source"] for hit in self.title_search(search_phrase, size=1000)["hits"]["hits"]]))
